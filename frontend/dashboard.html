@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IDoIDR | Agentic Drug Discovery for the Undruggable</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- React + Babel -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Framer Motion -->
+    <script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
+    
+    <!-- Mol* Viewer - PDBe implementation -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pdbe-molstar@3.3.0/build/pdbe-molstar.css">
+    <script src="https://cdn.jsdelivr.net/npm/pdbe-molstar@3.3.0/build/pdbe-molstar-plugin.js"></script>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    
+    <style>
+        :root {
+            --bg: #000000;
+            --bg-card: #111111;
+            --bg-elevated: #1a1a1a;
+            --border: #222222;
+            --text: #ffffff;
+            --text-secondary: #888888;
+            --accent: #6366f1;
+            --accent-glow: rgba(99, 102, 241, 0.3);
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+        
+        .app {
+            display: grid;
+            grid-template-columns: 1fr 420px;
+            grid-template-rows: 72px 1fr;
+            min-height: 100vh;
+        }
+        
+        /* Header */
+        .header {
+            grid-column: 1 / -1;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 32px;
+            border-bottom: 1px solid var(--border);
+            background: rgba(0,0,0,0.9);
+            backdrop-filter: blur(20px);
+            z-index: 100;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        
+        .logo-icon {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 20px var(--accent-glow);
+        }
+        
+        .logo h1 {
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+        
+        .logo h1 span {
+            background: linear-gradient(135deg, #6366f1, #ec4899);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: var(--bg-elevated);
+            border-radius: 100px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-secondary);
+        }
+        
+        .status-dot.active {
+            background: var(--success);
+            box-shadow: 0 0 10px var(--success);
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        /* Main Content */
+        .main {
+            padding: 24px;
+            overflow-y: auto;
+        }
+        
+        /* Metrics */
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        
+        .metric {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 20px;
+            text-align: center;
+            transition: all 0.3s;
+        }
+        
+        .metric:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+        }
+        
+        .metric-value {
+            font-size: 36px;
+            font-weight: 800;
+            letter-spacing: -1px;
+            margin-bottom: 4px;
+        }
+        
+        .metric-value.success { color: var(--success); }
+        .metric-value.accent { color: var(--accent); }
+        .metric-value.warning { color: var(--warning); }
+        
+        .metric-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        /* 3D Viewer */
+        .viewer-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            overflow: hidden;
+            margin-bottom: 24px;
+        }
+        
+        .viewer-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .viewer-title {
+            font-size: 14px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+        }
+        
+        .viewer-controls {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .viewer-btn {
+            padding: 6px 14px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .viewer-btn:hover {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+        
+        .viewer-btn.active {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+        
+        .viewer-container {
+            height: 400px;
+            background: #0a0a0a;
+        }
+        
+        #molstar-container {
+            width: 100%;
+            height: 100%;
+        }
+        
+        /* Hits Table */
+        .hits-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            overflow: hidden;
+        }
+        
+        .hits-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .hit-row {
+            display: grid;
+            grid-template-columns: 60px 1fr 100px 100px;
+            align-items: center;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            transition: all 0.2s;
+        }
+        
+        .hit-row:hover {
+            background: var(--bg-elevated);
+        }
+        
+        .hit-rank {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text-secondary);
+        }
+        
+        .hit-rank.gold { color: #fbbf24; }
+        
+        .hit-name {
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+        
+        .hit-smiles {
+            font-size: 11px;
+            color: var(--text-secondary);
+            font-family: 'SF Mono', monospace;
+        }
+        
+        .hit-kd {
+            text-align: right;
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--success);
+        }
+        
+        .hit-kd span {
+            font-size: 12px;
+            font-weight: 400;
+            color: var(--text-secondary);
+        }
+        
+        .hit-dg {
+            text-align: right;
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+        
+        /* Right Panel */
+        .panel {
+            background: var(--bg-card);
+            border-left: 1px solid var(--border);
+            padding: 24px;
+            overflow-y: auto;
+        }
+        
+        .agent-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        
+        .agent-avatar {
+            width: 56px;
+            height: 56px;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 20px var(--accent-glow);
+        }
+        
+        .agent-info h3 {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 2px;
+        }
+        
+        .agent-info span {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+        
+        /* Progress */
+        .progress-section {
+            margin-bottom: 24px;
+        }
+        
+        .progress-title {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+            margin-bottom: 16px;
+        }
+        
+        .step {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+        
+        .step-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: var(--bg-elevated);
+            border: 2px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+        
+        .step-icon.active {
+            border-color: var(--accent);
+            color: var(--accent);
+            animation: pulse 1.5s infinite;
+        }
+        
+        .step-icon.complete {
+            background: var(--success);
+            border-color: var(--success);
+            color: white;
+        }
+        
+        .step-text h4 {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+        
+        .step-text span {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+        
+        /* Rule Box */
+        .rule-box {
+            background: linear-gradient(135deg, rgba(99,102,241,0.1), rgba(139,92,246,0.1));
+            border: 1px solid rgba(99,102,241,0.3);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+        
+        .rule-label {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--accent);
+            margin-bottom: 12px;
+        }
+        
+        .rule-equation {
+            font-family: 'SF Mono', monospace;
+            font-size: 18px;
+            color: var(--success);
+            margin-bottom: 12px;
+        }
+        
+        .rule-interpretation {
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+        
+        /* Thoughts */
+        .thoughts {
+            margin-bottom: 24px;
+        }
+        
+        .thought {
+            padding: 14px 16px;
+            background: var(--bg-elevated);
+            border-radius: 12px;
+            margin-bottom: 10px;
+            border-left: 3px solid var(--border);
+        }
+        
+        .thought.thinking { border-left-color: var(--warning); }
+        .thought.success { border-left-color: var(--success); }
+        
+        .thought-time {
+            font-size: 11px;
+            color: var(--text-secondary);
+            font-family: 'SF Mono', monospace;
+            margin-bottom: 6px;
+        }
+        
+        .thought-content {
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        
+        /* Start Button */
+        .start-btn {
+            width: 100%;
+            padding: 18px;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            border: none;
+            border-radius: 14px;
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        
+        .start-btn:hover {
+            transform: scale(1.02);
+            box-shadow: 0 8px 32px var(--accent-glow);
+        }
+        
+        .start-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        /* Responsive */
+        @media (max-width: 1200px) {
+            .app { grid-template-columns: 1fr; }
+            .panel { display: none; }
+            .metrics { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+        const { motion, AnimatePresence } = Motion;
+        
+        // Mock data
+        const mockHits = [
+            { rank: 1, name: "Indole", smiles: "c1ccc2[nH]ccc2c1", kd: 42, dg: -7.8 },
+            { rank: 2, name: "Benzimidazole", smiles: "c1ccc2[nH]cnc2c1", kd: 78, dg: -7.5 },
+            { rank: 3, name: "Naphthalene", smiles: "c1ccc2ccccc2c1", kd: 124, dg: -7.2 },
+            { rank: 4, name: "Quinoline", smiles: "c1ccc2ncccc2c1", kd: 189, dg: -6.9 },
+            { rank: 5, name: "Catechol", smiles: "c1ccc(O)c(O)c1", kd: 256, dg: -6.7 },
+        ];
+        
+        const steps = [
+            { id: 1, title: "Load Ensemble", desc: "PED00024 conformers" },
+            { id: 2, title: "Validate SAXS", desc: "χ² < 2.0 target" },
+            { id: 3, title: "Screen Fragments", desc: "Boltzmann docking" },
+            { id: 4, title: "Discover Rules", desc: "PySR symbolic" },
+        ];
+        
+        function Header({ status }) {
+            return (
+                <header className="header">
+                    <div className="logo">
+                        <div className="logo-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                                <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                                <path d="M2 17l10 5 10-5"/>
+                                <path d="M2 12l10 5 10-5"/>
+                            </svg>
+                        </div>
+                        <h1>IDo<span>IDR</span></h1>
+                    </div>
+                    <div className="header-right">
+                        <div className="status-badge">
+                            <div className={`status-dot ${status === 'running' ? 'active' : ''}`}></div>
+                            <span>{status === 'running' ? 'Discovering...' : 'Ready'}</span>
+                        </div>
+                    </div>
+                </header>
+            );
+        }
+        
+        function Metrics({ metrics }) {
+            return (
+                <div className="metrics">
+                    <motion.div className="metric" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+                        <div className={`metric-value ${metrics.validated ? 'success' : 'warning'}`}>
+                            {metrics.validated ? '✓' : '○'}
+                        </div>
+                        <div className="metric-label">Validated</div>
+                    </motion.div>
+                    <motion.div className="metric" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+                        <div className="metric-value">{metrics.conformers}</div>
+                        <div className="metric-label">Conformers</div>
+                    </motion.div>
+                    <motion.div className="metric" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+                        <div className="metric-value accent">{metrics.screened}</div>
+                        <div className="metric-label">Screened</div>
+                    </motion.div>
+                    <motion.div className="metric" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+                        <div className="metric-value success">{metrics.bestKd}</div>
+                        <div className="metric-label">Best Kd (nM)</div>
+                    </motion.div>
+                </div>
+            );
+        }
+        
+        function MolstarViewer({ viewMode, setViewMode }) {
+            const containerRef = useRef(null);
+            const viewerRef = useRef(null);
+            
+            useEffect(() => {
+                if (containerRef.current && window.PDBeMolstarPlugin) {
+                    viewerRef.current = new window.PDBeMolstarPlugin();
+                    viewerRef.current.render(containerRef.current, {
+                        moleculeId: '1xq8', // α-synuclein structure
+                        hideCanvasControls: ['selection', 'animation', 'controlToggle'],
+                        bgColor: { r: 10, g: 10, b: 10 },
+                        hideControls: true,
+                        landscape: true,
+                        subscribeEvents: false
+                    });
+                }
+                return () => {
+                    if (viewerRef.current) {
+                        viewerRef.current.clear();
+                    }
+                };
+            }, []);
+            
+            return (
+                <div className="viewer-section">
+                    <div className="viewer-header">
+                        <div className="viewer-title">Conformational Ensemble</div>
+                        <div className="viewer-controls">
+                            <button 
+                                className={`viewer-btn ${viewMode === 'cartoon' ? 'active' : ''}`}
+                                onClick={() => setViewMode('cartoon')}
+                            >Cartoon</button>
+                            <button 
+                                className={`viewer-btn ${viewMode === 'surface' ? 'active' : ''}`}
+                                onClick={() => setViewMode('surface')}
+                            >Surface</button>
+                            <button 
+                                className={`viewer-btn ${viewMode === 'ball' ? 'active' : ''}`}
+                                onClick={() => setViewMode('ball')}
+                            >Ball+Stick</button>
+                        </div>
+                    </div>
+                    <div className="viewer-container">
+                        <div id="molstar-container" ref={containerRef}></div>
+                    </div>
+                </div>
+            );
+        }
+        
+        function HitsTable({ hits }) {
+            return (
+                <div className="hits-section">
+                    <div className="hits-header">
+                        <div className="viewer-title">Top Fragment Hits</div>
+                    </div>
+                    <AnimatePresence>
+                        {hits.map((hit, i) => (
+                            <motion.div
+                                key={hit.name}
+                                className="hit-row"
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ delay: i * 0.1 }}
+                            >
+                                <div className={`hit-rank ${i === 0 ? 'gold' : ''}`}>
+                                    {i === 0 ? '🏆' : `#${hit.rank}`}
+                                </div>
+                                <div>
+                                    <div className="hit-name">{hit.name}</div>
+                                    <div className="hit-smiles">{hit.smiles}</div>
+                                </div>
+                                <div className="hit-kd">{hit.kd}<span> nM</span></div>
+                                <div className="hit-dg">{hit.dg.toFixed(1)} kcal/mol</div>
+                            </motion.div>
+                        ))}
+                    </AnimatePresence>
+                </div>
+            );
+        }
+        
+        function Panel({ thoughts, rule, currentStep, onStart, isRunning }) {
+            return (
+                <aside className="panel">
+                    <div className="agent-header">
+                        <div className="agent-avatar">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                                <circle cx="12" cy="12" r="10"/>
+                                <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
+                                <line x1="9" y1="9" x2="9.01" y2="9"/>
+                                <line x1="15" y1="9" x2="15.01" y2="9"/>
+                            </svg>
+                        </div>
+                        <div className="agent-info">
+                            <h3>Discovery Agent</h3>
+                            <span>Gemini 2.0 Flash • Thinking</span>
+                        </div>
+                    </div>
+                    
+                    <div className="progress-section">
+                        <div className="progress-title">Workflow Progress</div>
+                        {steps.map((step, i) => (
+                            <div className="step" key={step.id}>
+                                <div className={`step-icon ${
+                                    currentStep > i ? 'complete' : 
+                                    currentStep === i ? 'active' : ''
+                                }`}>
+                                    {currentStep > i ? '✓' : step.id}
+                                </div>
+                                <div className="step-text">
+                                    <h4>{step.title}</h4>
+                                    <span>{step.desc}</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    
+                    {rule && (
+                        <motion.div 
+                            className="rule-box"
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                        >
+                            <div className="rule-label">Discovered Binding Rule</div>
+                            <div className="rule-equation">{rule.equation}</div>
+                            <div className="rule-interpretation">{rule.interpretation}</div>
+                        </motion.div>
+                    )}
+                    
+                    <div className="thoughts">
+                        <AnimatePresence>
+                            {thoughts.slice(-4).map((t, i) => (
+                                <motion.div
+                                    key={i}
+                                    className={`thought ${t.type}`}
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                >
+                                    <div className="thought-time">{t.time}</div>
+                                    <div className="thought-content">{t.content}</div>
+                                </motion.div>
+                            ))}
+                        </AnimatePresence>
+                    </div>
+                    
+                    <button className="start-btn" onClick={onStart} disabled={isRunning}>
+                        {isRunning ? <><div className="spinner"></div>Discovering...</> : 'Start Discovery'}
+                    </button>
+                </aside>
+            );
+        }
+        
+        function App() {
+            const [status, setStatus] = useState('ready');
+            const [viewMode, setViewMode] = useState('cartoon');
+            const [metrics, setMetrics] = useState({ validated: false, conformers: 0, screened: 0, bestKd: '—' });
+            const [hits, setHits] = useState([]);
+            const [thoughts, setThoughts] = useState([]);
+            const [rule, setRule] = useState(null);
+            const [currentStep, setCurrentStep] = useState(0);
+            const [isRunning, setIsRunning] = useState(false);
+            
+            const addThought = (content, type = 'info') => {
+                const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+                setThoughts(prev => [...prev, { content, type, time }]);
+            };
+            
+            const runDiscovery = async () => {
+                setIsRunning(true);
+                setStatus('running');
+                setThoughts([]);
+                setCurrentStep(0);
+                
+                // Step 1
+                addThought('Loading PED00024 ensemble...', 'thinking');
+                await new Promise(r => setTimeout(r, 1000));
+                setCurrentStep(1);
+                setMetrics(m => ({ ...m, conformers: 500 }));
+                addThought('✓ Loaded 500 α-synuclein conformers', 'success');
+                
+                // Step 2
+                await new Promise(r => setTimeout(r, 800));
+                addThought('Validating against SAXS experimental data...', 'thinking');
+                await new Promise(r => setTimeout(r, 1200));
+                setCurrentStep(2);
+                setMetrics(m => ({ ...m, validated: true }));
+                addThought('✓ Validation passed: χ² = 1.82', 'success');
+                
+                // Step 3
+                await new Promise(r => setTimeout(r, 800));
+                addThought('Screening 12 aromatic fragments with Boltzmann averaging...', 'thinking');
+                await new Promise(r => setTimeout(r, 2000));
+                setCurrentStep(3);
+                setHits(mockHits);
+                setMetrics(m => ({ ...m, screened: 12, bestKd: '42' }));
+                addThought('✓ Found 5 hits with Kd < 300 nM', 'success');
+                
+                // Step 4
+                await new Promise(r => setTimeout(r, 800));
+                addThought('Running PySR symbolic regression...', 'thinking');
+                await new Promise(r => setTimeout(r, 1500));
+                setCurrentStep(4);
+                setRule({
+                    equation: 'ΔG = -2.3·Rg + 1.8·N_arom - 0.5·SASA',
+                    interpretation: 'Extended conformers with exposed aromatic residues favor binding. The NAC region (61-95) is the primary binding site for π-stacking interactions.'
+                });
+                addThought('✓ Discovered interpretable binding rule', 'success');
+                
+                setStatus('complete');
+                setIsRunning(false);
+            };
+            
+            return (
+                <div className="app">
+                    <Header status={status} />
+                    <main className="main">
+                        <Metrics metrics={metrics} />
+                        <MolstarViewer viewMode={viewMode} setViewMode={setViewMode} />
+                        <HitsTable hits={hits} />
+                    </main>
+                    <Panel 
+                        thoughts={thoughts}
+                        rule={rule}
+                        currentStep={currentStep}
+                        onStart={runDiscovery}
+                        isRunning={isRunning}
+                    />
+                </div>
+            );
+        }
+        
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>
