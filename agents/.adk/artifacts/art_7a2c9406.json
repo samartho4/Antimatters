@@ -1,0 +1,67 @@
+{
+  "id": "art_7a2c9406",
+  "type": "evolution_trace",
+  "name": "Scientific Graph: Alpha-Synuclein",
+  "metadata": {
+    "id": "art_7a2c9406",
+    "type": "ArtifactType.EVOLUTION_TRACE",
+    "name": "Scientific Graph: Alpha-Synuclein",
+    "created_at": "2026-01-28T23:35:43.233089",
+    "updated_at": "2026-01-28T23:35:43.233089",
+    "version": 1,
+    "parent_id": null,
+    "tags": [
+      "knowledge_graph",
+      "scientific",
+      "alpha-synuclein"
+    ],
+    "comments": []
+  },
+  "content": {
+    "entities": [
+      {
+        "entity_id": "exp_protein_14b9b4bb",
+        "entity_type": "Protein",
+        "level": 1,
+        "name": "Alpha-Synuclein",
+        "properties": {
+          "pdb_path": null,
+          "n_clusters": null,
+          "experiment_id": null
+        },
+        "external_ids": {}
+      },
+      {
+        "entity_id": "ref_protein_alpha_synuclein",
+        "entity_type": "Protein",
+        "level": 2,
+        "name": "Alpha-Synuclein",
+        "properties": {},
+        "external_ids": {
+          "uniprot": "P37840",
+          "ped": "PED00006e001"
+        }
+      }
+    ],
+    "relationships": [
+      {
+        "relationship_id": "corr_9656d65d",
+        "subject_id": "exp_protein_14b9b4bb",
+        "predicate": "CORRESPONDS_TO",
+        "object_id": "ref_protein_alpha_synuclein",
+        "properties": {
+          "resolution_method": "jaro_winkler"
+        }
+      }
+    ],
+    "n_entities": 2,
+    "n_relationships": 1,
+    "protein_name": "Alpha-Synuclein",
+    "levels": {
+      "experimental": 1,
+      "reference": 1,
+      "vocabulary": 0
+    },
+    "created_at": "2026-01-28T23:35:43.233053"
+  }
+}

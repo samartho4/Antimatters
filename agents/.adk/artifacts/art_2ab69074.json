@@ -1,0 +1,51 @@
+{
+  "id": "art_2ab69074",
+  "type": "protocol",
+  "name": "Protocol: Alpha-Synuclein",
+  "metadata": {
+    "id": "art_2ab69074",
+    "type": "ArtifactType.PROTOCOL",
+    "name": "Protocol: Alpha-Synuclein",
+    "created_at": "2026-01-29T07:24:35.370733",
+    "updated_at": "2026-01-29T07:24:43.539141",
+    "version": 2,
+    "parent_id": null,
+    "tags": [
+      "research",
+      "protocol",
+      "PED00024"
+    ],
+    "comments": []
+  },
+  "content": {
+    "ped_id": "PED00024",
+    "protein_name": "Alpha-Synuclein",
+    "protein_pdb_path": "/Users/sam/.idpet/data/PED00024_e001.pdb",
+    "ensemble_id": "e001",
+    "n_conformations": 575,
+    "n_residues": 140,
+    "binding_site_residues": [
+      125,
+      133,
+      136
+    ],
+    "ligands": [
+      {
+        "smiles": "CC(=O)Nc1ccc2c(c1)C(=O)N(C2)C3CCCNC3",
+        "name": "Fasudil"
+      },
+      {
+        "name": "Ligand-47",
+        "smiles": "Cc1ccc(cc1)C(=O)Nc2ccc(cc2)c3ccccc3"
+      }
+    ],
+    "primary_citation": null,
+    "pmcid": null,
+    "figure_urls": [],
+    "validation_status": "pending",
+    "confidence_score": 6,
+    "created_at": "2026-01-29T07:24:35.370669",
+    "validation_notes": "Fasudil interaction with alpha-synuclein is supported by multiple computational and experimental studies showing its effects on aggregation and binding (PMID: 39693390, 39915220, 39232485, 36232847). However, no specific literature was found for 'Ligand-47' in relation to alpha-synuclein, suggesting it may be a novel or uncharacterized ligand for this protein.",
+    "validated_at": "2026-01-29T07:24:43.538778"
+  }
+}

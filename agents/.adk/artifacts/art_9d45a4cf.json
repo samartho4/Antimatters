@@ -1,0 +1,51 @@
+{
+  "id": "art_9d45a4cf",
+  "type": "protocol",
+  "name": "Protocol: Alpha-Synuclein",
+  "metadata": {
+    "id": "art_9d45a4cf",
+    "type": "ArtifactType.PROTOCOL",
+    "name": "Protocol: Alpha-Synuclein",
+    "created_at": "2026-01-29T08:52:03.314123",
+    "updated_at": "2026-01-29T08:52:13.357494",
+    "version": 2,
+    "parent_id": null,
+    "tags": [
+      "research",
+      "protocol",
+      "PED00024"
+    ],
+    "comments": []
+  },
+  "content": {
+    "ped_id": "PED00024",
+    "protein_name": "Alpha-Synuclein",
+    "protein_pdb_path": "/Users/sam/.idpet/data/PED00024_e001.pdb",
+    "ensemble_id": "e001",
+    "n_conformations": 575,
+    "n_residues": 140,
+    "binding_site_residues": [
+      125,
+      133,
+      136
+    ],
+    "ligands": [
+      {
+        "smiles": "CC(=O)Nc1ccc2c(c1)C(=O)N(C2)C3CCCNC3",
+        "name": "Fasudil"
+      },
+      {
+        "smiles": "Cc1ccc(cc1)C(=O)Nc2ccc(cc2)c3ccccc3",
+        "name": "Ligand-47"
+      }
+    ],
+    "primary_citation": null,
+    "pmcid": null,
+    "figure_urls": [],
+    "validation_status": "validated",
+    "confidence_score": 7,
+    "created_at": "2026-01-29T08:52:03.314051",
+    "validation_notes": "Validation for Fasudil interaction with Alpha-Synuclein is supported by multiple literature sources (PMID: 36232847, PMID: 39693390, PMID: 39232485) detailing molecular dynamics simulations, binding site predictions, and modulation of alpha-synuclein states. No specific literature was found for 'Ligand-47' interaction with Alpha-Synuclein, indicating it is a novel candidate for this docking experiment. The protocol specifies 3 clusters for ensemble docking for the engineering agent.",
+    "validated_at": "2026-01-29T08:52:13.356743"
+  }
+}

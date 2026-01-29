@@ -1,0 +1,67 @@
+{
+  "id": "art_54be5d57",
+  "type": "experiment_matrix",
+  "name": "Alpha-Synuclein Docking",
+  "metadata": {
+    "id": "art_54be5d57",
+    "type": "ArtifactType.EXPERIMENT_MATRIX",
+    "name": "Alpha-Synuclein Docking",
+    "created_at": "2026-01-29T12:46:06.588051",
+    "updated_at": "2026-01-29T13:34:20.451239",
+    "version": 3,
+    "parent_id": null,
+    "tags": [
+      "parallel",
+      "docking",
+      "experiment"
+    ],
+    "comments": []
+  },
+  "content": {
+    "experiment_id": "exp_f14a8306",
+    "protein_pdb_path": "/Users/sam/.idpet/data/PED00024_e001.pdb",
+    "n_clusters": 3,
+    "representative_frames": [],
+    "cluster_populations": [],
+    "ligand_results": [
+      {
+        "ligand_name": "Fasudil",
+        "smiles": "CC(=O)Nc1ccc2c(c1)C(=O)N(C2)C3CCCNC3",
+        "pdbqt_path": "",
+        "status": "completed",
+        "best_energy": null,
+        "best_cluster": null,
+        "best_residue": null,
+        "interaction_types": [],
+        "completion_time": "2026-01-29T13:34:20.447070",
+        "ligand_properties": {
+          "aromatic_rings": 0,
+          "hbond_donors": 0,
+          "charged_atoms": 0
+        }
+      },
+      {
+        "ligand_name": "Ligand-47",
+        "smiles": "Cc1ccc(cc1)C(=O)Nc2ccc(cc2)c3ccccc3",
+        "pdbqt_path": "",
+        "status": "completed",
+        "best_energy": null,
+        "best_cluster": null,
+        "best_residue": null,
+        "interaction_types": [],
+        "completion_time": "2026-01-29T13:34:20.451147",
+        "ligand_properties": {
+          "aromatic_rings": 0,
+          "hbond_donors": 0,
+          "charged_atoms": 0
+        }
+      }
+    ],
+    "best_overall_energy": null,
+    "best_ligand": null,
+    "ensemble_weighted_avg": null,
+    "cluster_plot_path": null,
+    "energy_heatmap_path": null,
+    "metadata": null
+  }
+}

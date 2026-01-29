@@ -1,0 +1,465 @@
+
+<!DOCTYPE HTML>
+<html lang="" >
+    <head>
+        <meta charset="UTF-8">
+        <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
+        <title>Knowledge Graph · GitBook</title>
+        <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+        <meta name="description" content="">
+        <meta name="generator" content="GitBook 3.2.3">
+        
+        
+        
+    
+    <link rel="stylesheet" href="../gitbook/style.css">
+
+    
+            
+                
+                <link rel="stylesheet" href="../gitbook/gitbook-plugin-highlight/website.css">
+                
+            
+                
+                <link rel="stylesheet" href="../gitbook/gitbook-plugin-search/search.css">
+                
+            
+                
+                <link rel="stylesheet" href="../gitbook/gitbook-plugin-fontsettings/website.css">
+                
+            
+        
+
+    
+
+    
+        
+    
+        
+    
+        
+    
+        
+    
+        
+    
+        
+    
+
+        
+    
+    
+    <meta name="HandheldFriendly" content="true"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <link rel="apple-touch-icon-precomposed" sizes="152x152" href="../gitbook/images/apple-touch-icon-precomposed-152.png">
+    <link rel="shortcut icon" href="../gitbook/images/favicon.ico" type="image/x-icon">
+
+    
+    <link rel="next" href="artifacts.html" />
+    
+    
+    <link rel="prev" href="agents.html" />
+    
+
+    </head>
+    <body>
+        
+<div class="book">
+    <div class="book-summary">
+        
+            
+<div id="book-search-input" role="search">
+    <input type="text" placeholder="Type to search" />
+</div>
+
+            
+                <nav role="navigation">
+                
+
+
+<ul class="summary">
+    
+    
+
+    
+
+    
+        
+        
+    
+        <li class="chapter " data-level="1.1" data-path="../">
+            
+                <a href="../">
+            
+                    
+                    Antimatters
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">Architecture</li>
+        
+        
+    
+        <li class="chapter " data-level="2.1" data-path="agents.html">
+            
+                <a href="agents.html">
+            
+                    
+                    Agent Architecture
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter active" data-level="2.2" data-path="knowledge-graph.html">
+            
+                <a href="knowledge-graph.html">
+            
+                    
+                    Knowledge Graph
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="2.3" data-path="artifacts.html">
+            
+                <a href="artifacts.html">
+            
+                    
+                    Artifacts
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="2.4" data-path="async-patterns.html">
+            
+                <a href="async-patterns.html">
+            
+                    
+                    Async Patterns
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">Components</li>
+        
+        
+    
+        <li class="chapter " data-level="3.1" data-path="../components/mcp-docking.html">
+            
+                <a href="../components/mcp-docking.html">
+            
+                    
+                    MCP Docking Server
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.2" data-path="../components/backend.html">
+            
+                <a href="../components/backend.html">
+            
+                    
+                    Backend API
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.3" data-path="../components/database.html">
+            
+                <a href="../components/database.html">
+            
+                    
+                    Database
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">Guides</li>
+        
+        
+    
+        <li class="chapter " data-level="4.1" data-path="../guides/molecule-generation.html">
+            
+                <a href="../guides/molecule-generation.html">
+            
+                    
+                    Molecule Generation
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="4.2" data-path="../guides/parallel-docking.html">
+            
+                <a href="../guides/parallel-docking.html">
+            
+                    
+                    Parallel Docking
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">Reference</li>
+        
+        
+    
+        <li class="chapter " data-level="5.1" data-path="../reference/api.html">
+            
+                <a href="../reference/api.html">
+            
+                    
+                    API Endpoints
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="5.2" data-path="../reference/tools.html">
+            
+                <a href="../reference/tools.html">
+            
+                    
+                    Tool Reference
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+
+    <li class="divider"></li>
+
+    <li>
+        <a href="https://www.gitbook.com" target="blank" class="gitbook-link">
+            Published with GitBook
+        </a>
+    </li>
+</ul>
+
+
+                </nav>
+            
+        
+    </div>
+
+    <div class="book-body">
+        
+            <div class="body-inner">
+                
+                    
+
+<div class="book-header" role="navigation">
+    
+
+    <!-- Title -->
+    <h1>
+        <i class="fa fa-circle-o-notch fa-spin"></i>
+        <a href=".." >Knowledge Graph</a>
+    </h1>
+</div>
+
+
+
+
+                    <div class="page-wrapper" tabindex="-1" role="main">
+                        <div class="page-inner">
+                            
+<div id="book-search-results">
+    <div class="search-noresults">
+    
+                                <section class="normal markdown-section">
+                                
+                                <h1 id="knowledge-graph">Knowledge Graph</h1>
+<h2 id="implementation">Implementation</h2>
+<p>Neo4j stores a 3-level graph structure (based on MedGraphRAG pattern):</p>
+<pre><code>Level 1: Experimental    &#x2192;   Level 2: Reference     &#x2192;   Level 3: Vocabulary
+(our docking results)        (ChEMBL, PED entries)      (UniProt, PubChem IDs)
+</code></pre><h3 id="entities">Entities</h3>
+<pre><code class="lang-python"><span class="hljs-comment"># evolution/agent.py L92-106</span>
+<span class="hljs-meta">@dataclass</span>
+<span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">ScientificEntity</span>:</span>
+    entity_id: str
+    entity_type: str    <span class="hljs-comment"># Protein, Ligand, Residue, Interaction</span>
+    level: int          <span class="hljs-comment"># 1=experimental, 2=reference, 3=vocabulary</span>
+    name: str
+    properties: Dict
+    external_ids: Dict  <span class="hljs-comment"># uniprot, chembl, pubchem</span>
+</code></pre>
+<h3 id="relationships">Relationships</h3>
+<pre><code class="lang-python"><span class="hljs-comment"># evolution/agent.py L109-124</span>
+<span class="hljs-meta">@dataclass</span>
+<span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">ScientificRelationship</span>:</span>
+    relationship_id: str
+    subject_id: str
+    predicate: str      <span class="hljs-comment"># DOCKS_TO, INTERACTS_WITH, CORRESPONDS_TO</span>
+    object_id: str
+    properties: Dict
+</code></pre>
+<h3 id="entity-resolution">Entity Resolution</h3>
+<p>Uses Jaro-Winkler similarity to link experimental entities to reference databases:</p>
+<pre><code class="lang-python"><span class="hljs-comment"># evolution/agent.py L147-212</span>
+<span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">jaro_winkler_similarity</span><span class="hljs-params">(s1: str, s2: str)</span> -&gt; float:</span>
+    <span class="hljs-comment"># Matches &quot;&#x3B1;-synuclein&quot; to &quot;alpha-synuclein&quot; to PED00006</span>
+</code></pre>
+<h3 id="neo4j-persistence">Neo4j Persistence</h3>
+<pre><code class="lang-python"><span class="hljs-comment"># evolution/agent.py L799-867</span>
+<span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">build_knowledge_graph</span><span class="hljs-params">(experiment_artifact_id, ...)</span>:</span>
+    driver, database = get_neo4j_driver()
+    <span class="hljs-keyword">with</span> driver.session(database=database) <span class="hljs-keyword">as</span> session:
+        <span class="hljs-keyword">for</span> entity <span class="hljs-keyword">in</span> entities:
+            session.run(<span class="hljs-string">&quot;MERGE (e:$($type) {entity_id: $id}) SET e += $props&quot;</span>, ...)
+        <span class="hljs-keyword">for</span> rel <span class="hljs-keyword">in</span> relationships:
+            session.run(<span class="hljs-string">&quot;MATCH (a {entity_id: $s}), (b {entity_id: $o}) MERGE (a)-[r:$($p)]-&gt;(b)&quot;</span>, ...)
+</code></pre>
+<h2 id="sqlite-storage">SQLite Storage</h2>
+<p>Backend also stores knowledge items in SQLite for UI display:</p>
+<pre><code class="lang-python"><span class="hljs-comment"># api/services.py KnowledgeService</span>
+<span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">create</span><span class="hljs-params">(workspace_id, knowledge_type, title, content, tags)</span>:</span>
+    <span class="hljs-comment"># Types: insight, procedure, result, feedback, reference</span>
+</code></pre>
+<p>Semantic search uses <code>text-embedding-004</code>:</p>
+<pre><code class="lang-python"><span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">semantic_search</span><span class="hljs-params">(self, query, limit=<span class="hljs-number">5</span>)</span>:</span>
+    query_embedding = genai.embed_content(model=<span class="hljs-string">&quot;models/text-embedding-004&quot;</span>, ...)
+    <span class="hljs-comment"># Cosine similarity against stored embeddings</span>
+</code></pre>
+<h2 id="status">Status</h2>
+<ul>
+<li>[x] Entity/relationship dataclasses</li>
+<li>[x] Jaro-Winkler resolution</li>
+<li>[x] Neo4j driver integration</li>
+<li>[x] SQLite knowledge items</li>
+<li>[ ] Embedding population (column exists, not always populated)</li>
+</ul>
+
+                                
+                                </section>
+                            
+    </div>
+    <div class="search-results">
+        <div class="has-results">
+            
+            <h1 class="search-results-title"><span class='search-results-count'></span> results matching "<span class='search-query'></span>"</h1>
+            <ul class="search-results-list"></ul>
+            
+        </div>
+        <div class="no-results">
+            
+            <h1 class="search-results-title">No results matching "<span class='search-query'></span>"</h1>
+            
+        </div>
+    </div>
+</div>
+
+                        </div>
+                    </div>
+                
+            </div>
+
+            
+                
+                <a href="agents.html" class="navigation navigation-prev " aria-label="Previous page: Agent Architecture">
+                    <i class="fa fa-angle-left"></i>
+                </a>
+                
+                
+                <a href="artifacts.html" class="navigation navigation-next " aria-label="Next page: Artifacts">
+                    <i class="fa fa-angle-right"></i>
+                </a>
+                
+            
+        
+    </div>
+
+    <script>
+        var gitbook = gitbook || [];
+        gitbook.push(function() {
+            gitbook.page.hasChanged({"page":{"title":"Knowledge Graph","level":"2.2","depth":1,"next":{"title":"Artifacts","level":"2.3","depth":1,"path":"architecture/artifacts.md","ref":"architecture/artifacts.md","articles":[]},"previous":{"title":"Agent Architecture","level":"2.1","depth":1,"path":"architecture/agents.md","ref":"architecture/agents.md","articles":[]},"dir":"ltr"},"config":{"gitbook":"*","theme":"default","variables":{},"plugins":["livereload"],"pluginsConfig":{"livereload":{},"highlight":{},"search":{},"lunr":{"maxIndexSize":1000000,"ignoreSpecialCharacters":false},"sharing":{"facebook":true,"twitter":true,"google":false,"weibo":false,"instapaper":false,"vk":false,"all":["facebook","google","twitter","weibo","instapaper"]},"fontsettings":{"theme":"white","family":"sans","size":2},"theme-default":{"styles":{"pdf":"styles/pdf.css","epub":"styles/epub.css","mobi":"styles/mobi.css","ebook":"styles/ebook.css","print":"styles/print.css","website":"styles/website.css"},"showLevel":false}},"structure":{"langs":"LANGS.md","readme":"README.md","glossary":"GLOSSARY.md","summary":"SUMMARY.md"},"pdf":{"pageNumbers":true,"fontSize":12,"fontFamily":"Arial","paperSize":"a4","chapterMark":"pagebreak","pageBreaksBefore":"/","margin":{"right":62,"left":62,"top":56,"bottom":56}},"styles":{"pdf":"styles/pdf.css","epub":"styles/epub.css","mobi":"styles/mobi.css","ebook":"styles/ebook.css","print":"styles/print.css","website":"styles/website.css"}},"file":{"path":"architecture/knowledge-graph.md","mtime":"2026-01-27T16:44:03.869Z","type":"markdown"},"gitbook":{"version":"3.2.3","time":"2026-01-29T05:31:45.870Z"},"basePath":"..","book":{"language":""}});
+        });
+    </script>
+</div>
+
+        
+    <script src="../gitbook/gitbook.js"></script>
+    <script src="../gitbook/theme.js"></script>
+    
+        
+        <script src="../gitbook/gitbook-plugin-livereload/plugin.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-search/search-engine.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-search/search.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-lunr/lunr.min.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-lunr/search-lunr.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-sharing/buttons.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-fontsettings/fontsettings.js"></script>
+        
+    
+
+    </body>
+</html>
+

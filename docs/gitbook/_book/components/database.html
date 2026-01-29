@@ -1,0 +1,513 @@
+
+<!DOCTYPE HTML>
+<html lang="" >
+    <head>
+        <meta charset="UTF-8">
+        <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
+        <title>Database · GitBook</title>
+        <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+        <meta name="description" content="">
+        <meta name="generator" content="GitBook 3.2.3">
+        
+        
+        
+    
+    <link rel="stylesheet" href="../gitbook/style.css">
+
+    
+            
+                
+                <link rel="stylesheet" href="../gitbook/gitbook-plugin-highlight/website.css">
+                
+            
+                
+                <link rel="stylesheet" href="../gitbook/gitbook-plugin-search/search.css">
+                
+            
+                
+                <link rel="stylesheet" href="../gitbook/gitbook-plugin-fontsettings/website.css">
+                
+            
+        
+
+    
+
+    
+        
+    
+        
+    
+        
+    
+        
+    
+        
+    
+        
+    
+
+        
+    
+    
+    <meta name="HandheldFriendly" content="true"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <link rel="apple-touch-icon-precomposed" sizes="152x152" href="../gitbook/images/apple-touch-icon-precomposed-152.png">
+    <link rel="shortcut icon" href="../gitbook/images/favicon.ico" type="image/x-icon">
+
+    
+    <link rel="next" href="../guides/molecule-generation.html" />
+    
+    
+    <link rel="prev" href="backend.html" />
+    
+
+    </head>
+    <body>
+        
+<div class="book">
+    <div class="book-summary">
+        
+            
+<div id="book-search-input" role="search">
+    <input type="text" placeholder="Type to search" />
+</div>
+
+            
+                <nav role="navigation">
+                
+
+
+<ul class="summary">
+    
+    
+
+    
+
+    
+        
+        
+    
+        <li class="chapter " data-level="1.1" data-path="../">
+            
+                <a href="../">
+            
+                    
+                    Antimatters
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">Architecture</li>
+        
+        
+    
+        <li class="chapter " data-level="2.1" data-path="../architecture/agents.html">
+            
+                <a href="../architecture/agents.html">
+            
+                    
+                    Agent Architecture
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="2.2" data-path="../architecture/knowledge-graph.html">
+            
+                <a href="../architecture/knowledge-graph.html">
+            
+                    
+                    Knowledge Graph
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="2.3" data-path="../architecture/artifacts.html">
+            
+                <a href="../architecture/artifacts.html">
+            
+                    
+                    Artifacts
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="2.4" data-path="../architecture/async-patterns.html">
+            
+                <a href="../architecture/async-patterns.html">
+            
+                    
+                    Async Patterns
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">Components</li>
+        
+        
+    
+        <li class="chapter " data-level="3.1" data-path="mcp-docking.html">
+            
+                <a href="mcp-docking.html">
+            
+                    
+                    MCP Docking Server
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.2" data-path="backend.html">
+            
+                <a href="backend.html">
+            
+                    
+                    Backend API
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter active" data-level="3.3" data-path="database.html">
+            
+                <a href="database.html">
+            
+                    
+                    Database
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">Guides</li>
+        
+        
+    
+        <li class="chapter " data-level="4.1" data-path="../guides/molecule-generation.html">
+            
+                <a href="../guides/molecule-generation.html">
+            
+                    
+                    Molecule Generation
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="4.2" data-path="../guides/parallel-docking.html">
+            
+                <a href="../guides/parallel-docking.html">
+            
+                    
+                    Parallel Docking
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">Reference</li>
+        
+        
+    
+        <li class="chapter " data-level="5.1" data-path="../reference/api.html">
+            
+                <a href="../reference/api.html">
+            
+                    
+                    API Endpoints
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="5.2" data-path="../reference/tools.html">
+            
+                <a href="../reference/tools.html">
+            
+                    
+                    Tool Reference
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+
+    <li class="divider"></li>
+
+    <li>
+        <a href="https://www.gitbook.com" target="blank" class="gitbook-link">
+            Published with GitBook
+        </a>
+    </li>
+</ul>
+
+
+                </nav>
+            
+        
+    </div>
+
+    <div class="book-body">
+        
+            <div class="body-inner">
+                
+                    
+
+<div class="book-header" role="navigation">
+    
+
+    <!-- Title -->
+    <h1>
+        <i class="fa fa-circle-o-notch fa-spin"></i>
+        <a href=".." >Database</a>
+    </h1>
+</div>
+
+
+
+
+                    <div class="page-wrapper" tabindex="-1" role="main">
+                        <div class="page-inner">
+                            
+<div id="book-search-results">
+    <div class="search-noresults">
+    
+                                <section class="normal markdown-section">
+                                
+                                <h1 id="database">Database</h1>
+<h2 id="sqlite-schema">SQLite Schema</h2>
+<p><strong>Location</strong>: <code>data/antimatters.db</code></p>
+<pre><code class="lang-sql"><span class="hljs-comment">-- Workspaces (project contexts)</span>
+<span class="hljs-keyword">CREATE</span> <span class="hljs-keyword">TABLE</span> workspaces (
+    <span class="hljs-keyword">id</span> <span class="hljs-built_in">TEXT</span> PRIMARY <span class="hljs-keyword">KEY</span>,
+    <span class="hljs-keyword">name</span> <span class="hljs-built_in">TEXT</span> <span class="hljs-keyword">NOT</span> <span class="hljs-literal">NULL</span>,
+    description <span class="hljs-built_in">TEXT</span>,
+    config <span class="hljs-built_in">TEXT</span> <span class="hljs-keyword">DEFAULT</span> <span class="hljs-string">&apos;{}&apos;</span>,     <span class="hljs-comment">-- JSON: binding_site, target_protein</span>
+    created_at <span class="hljs-built_in">TEXT</span> <span class="hljs-keyword">NOT</span> <span class="hljs-literal">NULL</span>,
+    updated_at <span class="hljs-built_in">TEXT</span> <span class="hljs-keyword">NOT</span> <span class="hljs-literal">NULL</span>
+);
+
+<span class="hljs-comment">-- Conversations (chat history)</span>
+<span class="hljs-keyword">CREATE</span> <span class="hljs-keyword">TABLE</span> conversations (
+    <span class="hljs-keyword">id</span> <span class="hljs-built_in">TEXT</span> PRIMARY <span class="hljs-keyword">KEY</span>,
+    workspace_id <span class="hljs-built_in">TEXT</span> <span class="hljs-keyword">NOT</span> <span class="hljs-literal">NULL</span>,
+    title <span class="hljs-built_in">TEXT</span> <span class="hljs-keyword">NOT</span> <span class="hljs-literal">NULL</span>,
+    <span class="hljs-keyword">status</span> <span class="hljs-built_in">TEXT</span> <span class="hljs-keyword">DEFAULT</span> <span class="hljs-string">&apos;active&apos;</span>,
+    created_at <span class="hljs-built_in">TEXT</span> <span class="hljs-keyword">NOT</span> <span class="hljs-literal">NULL</span>,
+    updated_at <span class="hljs-built_in">TEXT</span> <span class="hljs-keyword">NOT</span> <span class="hljs-literal">NULL</span>,
+    FOREIGN <span class="hljs-keyword">KEY</span> (workspace_id) <span class="hljs-keyword">REFERENCES</span> workspaces(<span class="hljs-keyword">id</span>)
+);
+
+<span class="hljs-comment">-- Messages (full history replay)</span>
+<span class="hljs-keyword">CREATE</span> <span class="hljs-keyword">TABLE</span> messages (
+    <span class="hljs-keyword">id</span> <span class="hljs-built_in">TEXT</span> PRIMARY <span class="hljs-keyword">KEY</span>,
+    conversation_id <span class="hljs-built_in">TEXT</span> <span class="hljs-keyword">NOT</span> <span class="hljs-literal">NULL</span>,
+    <span class="hljs-keyword">role</span> <span class="hljs-built_in">TEXT</span> <span class="hljs-keyword">NOT</span> <span class="hljs-literal">NULL</span>,           <span class="hljs-comment">-- user | assistant | tool</span>
+    <span class="hljs-keyword">content</span> <span class="hljs-built_in">TEXT</span>,
+    tool_calls <span class="hljs-built_in">TEXT</span>,              <span class="hljs-comment">-- JSON array</span>
+    metadata <span class="hljs-built_in">TEXT</span> <span class="hljs-keyword">DEFAULT</span> <span class="hljs-string">&apos;{}&apos;</span>,
+    created_at <span class="hljs-built_in">TEXT</span> <span class="hljs-keyword">NOT</span> <span class="hljs-literal">NULL</span>,
+    FOREIGN <span class="hljs-keyword">KEY</span> (conversation_id) <span class="hljs-keyword">REFERENCES</span> conversations(<span class="hljs-keyword">id</span>)
+);
+
+<span class="hljs-comment">-- Artifacts (Protocol, ExperimentMatrix, DiscoveryReport)</span>
+<span class="hljs-keyword">CREATE</span> <span class="hljs-keyword">TABLE</span> artifacts (
+    <span class="hljs-keyword">id</span> <span class="hljs-built_in">TEXT</span> PRIMARY <span class="hljs-keyword">KEY</span>,
+    conversation_id <span class="hljs-built_in">TEXT</span>,
+    workspace_id <span class="hljs-built_in">TEXT</span>,
+    <span class="hljs-keyword">type</span> <span class="hljs-built_in">TEXT</span> <span class="hljs-keyword">NOT</span> <span class="hljs-literal">NULL</span>,
+    title <span class="hljs-built_in">TEXT</span>,
+    <span class="hljs-keyword">content</span> <span class="hljs-built_in">TEXT</span> <span class="hljs-keyword">NOT</span> <span class="hljs-literal">NULL</span>,        <span class="hljs-comment">-- JSON</span>
+    metadata <span class="hljs-built_in">TEXT</span> <span class="hljs-keyword">DEFAULT</span> <span class="hljs-string">&apos;{}&apos;</span>,
+    created_at <span class="hljs-built_in">TEXT</span> <span class="hljs-keyword">NOT</span> <span class="hljs-literal">NULL</span>,
+    FOREIGN <span class="hljs-keyword">KEY</span> (conversation_id) <span class="hljs-keyword">REFERENCES</span> conversations(<span class="hljs-keyword">id</span>)
+);
+
+<span class="hljs-comment">-- Knowledge/Learnings (Evolution)</span>
+<span class="hljs-keyword">CREATE</span> <span class="hljs-keyword">TABLE</span> knowledge (
+    <span class="hljs-keyword">id</span> <span class="hljs-built_in">TEXT</span> PRIMARY <span class="hljs-keyword">KEY</span>,
+    workspace_id <span class="hljs-built_in">TEXT</span>,
+    <span class="hljs-keyword">type</span> <span class="hljs-built_in">TEXT</span> <span class="hljs-keyword">NOT</span> <span class="hljs-literal">NULL</span>,           <span class="hljs-comment">-- insight | procedure | result | feedback</span>
+    title <span class="hljs-built_in">TEXT</span> <span class="hljs-keyword">NOT</span> <span class="hljs-literal">NULL</span>,
+    <span class="hljs-keyword">content</span> <span class="hljs-built_in">TEXT</span> <span class="hljs-keyword">NOT</span> <span class="hljs-literal">NULL</span>,
+    source_conversation_id <span class="hljs-built_in">TEXT</span>,
+    source_artifact_id <span class="hljs-built_in">TEXT</span>,
+    tags <span class="hljs-built_in">TEXT</span> <span class="hljs-keyword">DEFAULT</span> <span class="hljs-string">&apos;[]&apos;</span>,       <span class="hljs-comment">-- JSON array</span>
+    embedding <span class="hljs-built_in">TEXT</span>,               <span class="hljs-comment">-- text-embedding-004 vector (JSON)</span>
+    created_at <span class="hljs-built_in">TEXT</span> <span class="hljs-keyword">NOT</span> <span class="hljs-literal">NULL</span>
+);
+
+<span class="hljs-comment">-- Feedback/Comments</span>
+<span class="hljs-keyword">CREATE</span> <span class="hljs-keyword">TABLE</span> feedback (
+    <span class="hljs-keyword">id</span> <span class="hljs-built_in">TEXT</span> PRIMARY <span class="hljs-keyword">KEY</span>,
+    artifact_id <span class="hljs-built_in">TEXT</span> <span class="hljs-keyword">NOT</span> <span class="hljs-literal">NULL</span>,
+    conversation_id <span class="hljs-built_in">TEXT</span>,
+    user_id <span class="hljs-built_in">TEXT</span> <span class="hljs-keyword">DEFAULT</span> <span class="hljs-string">&apos;scientist&apos;</span>,
+    <span class="hljs-keyword">comment</span> <span class="hljs-built_in">TEXT</span> <span class="hljs-keyword">NOT</span> <span class="hljs-literal">NULL</span>,
+    resolved <span class="hljs-built_in">INTEGER</span> <span class="hljs-keyword">DEFAULT</span> <span class="hljs-number">0</span>,
+    created_at <span class="hljs-built_in">TEXT</span> <span class="hljs-keyword">NOT</span> <span class="hljs-literal">NULL</span>,
+    FOREIGN <span class="hljs-keyword">KEY</span> (artifact_id) <span class="hljs-keyword">REFERENCES</span> artifacts(<span class="hljs-keyword">id</span>)
+);
+</code></pre>
+<h2 id="default-workspace">Default Workspace</h2>
+<p>Created on first run:</p>
+<pre><code class="lang-python">INSERT INTO workspaces VALUES (
+    <span class="hljs-string">&apos;ws_core&apos;</span>,
+    <span class="hljs-string">&apos;core&apos;</span>,
+    <span class="hljs-string">&apos;Default Antimatters workspace for IDP ensemble docking research&apos;</span>,
+    <span class="hljs-string">&apos;{&quot;binding_site&quot;: [125, 133, 136], &quot;target_protein&quot;: &quot;alpha-synuclein&quot;}&apos;</span>,
+    ...
+);
+</code></pre>
+<h2 id="usage">Usage</h2>
+<pre><code class="lang-python"><span class="hljs-keyword">from</span> api.services <span class="hljs-keyword">import</span> (
+    WorkspaceService, 
+    ConversationService, 
+    ArtifactService,
+    KnowledgeService
+)
+
+<span class="hljs-comment"># Create workspace</span>
+ws = WorkspaceService()
+workspace = ws.create(<span class="hljs-string">&quot;My Project&quot;</span>, config={<span class="hljs-string">&quot;target&quot;</span>: <span class="hljs-string">&quot;tau&quot;</span>})
+
+<span class="hljs-comment"># Create conversation</span>
+conv = ConversationService()
+conversation = conv.create(workspace[<span class="hljs-string">&quot;id&quot;</span>], <span class="hljs-string">&quot;Docking experiment&quot;</span>)
+
+<span class="hljs-comment"># Store artifact</span>
+art = ArtifactService()
+artifact = art.create(
+    artifact_type=<span class="hljs-string">&quot;protocol&quot;</span>,
+    content={<span class="hljs-string">&quot;target&quot;</span>: <span class="hljs-string">&quot;tau&quot;</span>, <span class="hljs-string">&quot;ligands&quot;</span>: [...]},
+    conversation_id=conversation[<span class="hljs-string">&quot;id&quot;</span>]
+)
+</code></pre>
+
+                                
+                                </section>
+                            
+    </div>
+    <div class="search-results">
+        <div class="has-results">
+            
+            <h1 class="search-results-title"><span class='search-results-count'></span> results matching "<span class='search-query'></span>"</h1>
+            <ul class="search-results-list"></ul>
+            
+        </div>
+        <div class="no-results">
+            
+            <h1 class="search-results-title">No results matching "<span class='search-query'></span>"</h1>
+            
+        </div>
+    </div>
+</div>
+
+                        </div>
+                    </div>
+                
+            </div>
+
+            
+                
+                <a href="backend.html" class="navigation navigation-prev " aria-label="Previous page: Backend API">
+                    <i class="fa fa-angle-left"></i>
+                </a>
+                
+                
+                <a href="../guides/molecule-generation.html" class="navigation navigation-next " aria-label="Next page: Molecule Generation">
+                    <i class="fa fa-angle-right"></i>
+                </a>
+                
+            
+        
+    </div>
+
+    <script>
+        var gitbook = gitbook || [];
+        gitbook.push(function() {
+            gitbook.page.hasChanged({"page":{"title":"Database","level":"3.3","depth":1,"next":{"title":"Molecule Generation","level":"4.1","depth":1,"path":"guides/molecule-generation.md","ref":"guides/molecule-generation.md","articles":[]},"previous":{"title":"Backend API","level":"3.2","depth":1,"path":"components/backend.md","ref":"components/backend.md","articles":[]},"dir":"ltr"},"config":{"gitbook":"*","theme":"default","variables":{},"plugins":["livereload"],"pluginsConfig":{"livereload":{},"highlight":{},"search":{},"lunr":{"maxIndexSize":1000000,"ignoreSpecialCharacters":false},"sharing":{"facebook":true,"twitter":true,"google":false,"weibo":false,"instapaper":false,"vk":false,"all":["facebook","google","twitter","weibo","instapaper"]},"fontsettings":{"theme":"white","family":"sans","size":2},"theme-default":{"styles":{"pdf":"styles/pdf.css","epub":"styles/epub.css","mobi":"styles/mobi.css","ebook":"styles/ebook.css","print":"styles/print.css","website":"styles/website.css"},"showLevel":false}},"structure":{"langs":"LANGS.md","readme":"README.md","glossary":"GLOSSARY.md","summary":"SUMMARY.md"},"pdf":{"pageNumbers":true,"fontSize":12,"fontFamily":"Arial","paperSize":"a4","chapterMark":"pagebreak","pageBreaksBefore":"/","margin":{"right":62,"left":62,"top":56,"bottom":56}},"styles":{"pdf":"styles/pdf.css","epub":"styles/epub.css","mobi":"styles/mobi.css","ebook":"styles/ebook.css","print":"styles/print.css","website":"styles/website.css"}},"file":{"path":"components/database.md","mtime":"2026-01-27T16:10:25.989Z","type":"markdown"},"gitbook":{"version":"3.2.3","time":"2026-01-29T05:31:45.870Z"},"basePath":"..","book":{"language":""}});
+        });
+    </script>
+</div>
+
+        
+    <script src="../gitbook/gitbook.js"></script>
+    <script src="../gitbook/theme.js"></script>
+    
+        
+        <script src="../gitbook/gitbook-plugin-livereload/plugin.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-search/search-engine.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-search/search.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-lunr/lunr.min.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-lunr/search-lunr.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-sharing/buttons.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-fontsettings/fontsettings.js"></script>
+        
+    
+
+    </body>
+</html>
+

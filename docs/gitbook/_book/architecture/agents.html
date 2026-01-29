@@ -1,0 +1,505 @@
+
+<!DOCTYPE HTML>
+<html lang="" >
+    <head>
+        <meta charset="UTF-8">
+        <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
+        <title>Agent Architecture · GitBook</title>
+        <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+        <meta name="description" content="">
+        <meta name="generator" content="GitBook 3.2.3">
+        
+        
+        
+    
+    <link rel="stylesheet" href="../gitbook/style.css">
+
+    
+            
+                
+                <link rel="stylesheet" href="../gitbook/gitbook-plugin-highlight/website.css">
+                
+            
+                
+                <link rel="stylesheet" href="../gitbook/gitbook-plugin-search/search.css">
+                
+            
+                
+                <link rel="stylesheet" href="../gitbook/gitbook-plugin-fontsettings/website.css">
+                
+            
+        
+
+    
+
+    
+        
+    
+        
+    
+        
+    
+        
+    
+        
+    
+        
+    
+
+        
+    
+    
+    <meta name="HandheldFriendly" content="true"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <link rel="apple-touch-icon-precomposed" sizes="152x152" href="../gitbook/images/apple-touch-icon-precomposed-152.png">
+    <link rel="shortcut icon" href="../gitbook/images/favicon.ico" type="image/x-icon">
+
+    
+    <link rel="next" href="knowledge-graph.html" />
+    
+    
+    <link rel="prev" href="../" />
+    
+
+    </head>
+    <body>
+        
+<div class="book">
+    <div class="book-summary">
+        
+            
+<div id="book-search-input" role="search">
+    <input type="text" placeholder="Type to search" />
+</div>
+
+            
+                <nav role="navigation">
+                
+
+
+<ul class="summary">
+    
+    
+
+    
+
+    
+        
+        
+    
+        <li class="chapter " data-level="1.1" data-path="../">
+            
+                <a href="../">
+            
+                    
+                    Antimatters
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">Architecture</li>
+        
+        
+    
+        <li class="chapter active" data-level="2.1" data-path="agents.html">
+            
+                <a href="agents.html">
+            
+                    
+                    Agent Architecture
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="2.2" data-path="knowledge-graph.html">
+            
+                <a href="knowledge-graph.html">
+            
+                    
+                    Knowledge Graph
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="2.3" data-path="artifacts.html">
+            
+                <a href="artifacts.html">
+            
+                    
+                    Artifacts
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="2.4" data-path="async-patterns.html">
+            
+                <a href="async-patterns.html">
+            
+                    
+                    Async Patterns
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">Components</li>
+        
+        
+    
+        <li class="chapter " data-level="3.1" data-path="../components/mcp-docking.html">
+            
+                <a href="../components/mcp-docking.html">
+            
+                    
+                    MCP Docking Server
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.2" data-path="../components/backend.html">
+            
+                <a href="../components/backend.html">
+            
+                    
+                    Backend API
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.3" data-path="../components/database.html">
+            
+                <a href="../components/database.html">
+            
+                    
+                    Database
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">Guides</li>
+        
+        
+    
+        <li class="chapter " data-level="4.1" data-path="../guides/molecule-generation.html">
+            
+                <a href="../guides/molecule-generation.html">
+            
+                    
+                    Molecule Generation
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="4.2" data-path="../guides/parallel-docking.html">
+            
+                <a href="../guides/parallel-docking.html">
+            
+                    
+                    Parallel Docking
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">Reference</li>
+        
+        
+    
+        <li class="chapter " data-level="5.1" data-path="../reference/api.html">
+            
+                <a href="../reference/api.html">
+            
+                    
+                    API Endpoints
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="5.2" data-path="../reference/tools.html">
+            
+                <a href="../reference/tools.html">
+            
+                    
+                    Tool Reference
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+
+    <li class="divider"></li>
+
+    <li>
+        <a href="https://www.gitbook.com" target="blank" class="gitbook-link">
+            Published with GitBook
+        </a>
+    </li>
+</ul>
+
+
+                </nav>
+            
+        
+    </div>
+
+    <div class="book-body">
+        
+            <div class="body-inner">
+                
+                    
+
+<div class="book-header" role="navigation">
+    
+
+    <!-- Title -->
+    <h1>
+        <i class="fa fa-circle-o-notch fa-spin"></i>
+        <a href=".." >Agent Architecture</a>
+    </h1>
+</div>
+
+
+
+
+                    <div class="page-wrapper" tabindex="-1" role="main">
+                        <div class="page-inner">
+                            
+<div id="book-search-results">
+    <div class="search-noresults">
+    
+                                <section class="normal markdown-section">
+                                
+                                <h1 id="agent-architecture">Agent Architecture</h1>
+<h2 id="overview">Overview</h2>
+<pre><code>coordinator.py
+&#x2514;&#x2500;&#x2500; root_agent (LlmAgent, gemini-2.5-pro)
+    &#x2514;&#x2500;&#x2500; docking_workflow (SequentialAgent)
+        &#x251C;&#x2500;&#x2500; research_agent
+        &#x251C;&#x2500;&#x2500; engineer_agent
+        &#x2514;&#x2500;&#x2500; evolution_agent
+</code></pre><p><code>SequentialAgent</code> guarantees order. Each agent receives previous agent&apos;s output via <code>tool_context.state</code>.</p>
+<h2 id="research-agent">Research Agent</h2>
+<p><strong>File</strong>: <code>agents/antimatters/_subagents/research/agent.py</code></p>
+<p><strong>Tools</strong>:</p>
+<ul>
+<li><code>fetch_ped_ensemble</code> &#x2014; downloads PDB from Protein Ensemble Database</li>
+<li><code>search_compounds</code> &#x2014; ChEMBL similarity search</li>
+<li><code>bc_get_europepmc_articles</code> &#x2014; literature via BioContext MCP</li>
+<li><code>create_protocol</code>, <code>validate_protocol</code></li>
+</ul>
+<p><strong>Output</strong>: Protocol artifact with target info, ligand candidates, evidence.</p>
+<h2 id="engineer-agent">Engineer Agent</h2>
+<p><strong>File</strong>: <code>agents/antimatters/_subagents/engineering/agent.py</code></p>
+<p><strong>Tools</strong>:</p>
+<ul>
+<li><code>cluster_conformations</code> &#x2014; t-SNE + k-medoids on RMSD</li>
+<li><code>prepare_ligand</code> &#x2014; SMILES &#x2192; 3D mol2 &#x2192; PDBQT</li>
+<li><code>dock_ensemble</code> &#x2014; AutoDock Vina per cluster</li>
+<li><code>analyze_interactions</code> &#x2014; H-bonds, hydrophobic, aromatic</li>
+<li><code>create_experiment</code>, <code>update_ligand_result</code></li>
+</ul>
+<p><strong>Parallel execution</strong>: <code>ParallelAgent</code> spawns one sub-agent per ligand. Each updates ExperimentMatrix independently.</p>
+<pre><code class="lang-python"><span class="hljs-comment"># engineering/agent.py L398-420</span>
+<span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">create_parallel_docking_agent</span><span class="hljs-params">(ligands)</span>:</span>
+    sub_agents = [create_ligand_agent(lig[<span class="hljs-string">&quot;name&quot;</span>], lig[<span class="hljs-string">&quot;smiles&quot;</span>]) <span class="hljs-keyword">for</span> lig <span class="hljs-keyword">in</span> ligands]
+    <span class="hljs-keyword">return</span> ParallelAgent(name=<span class="hljs-string">&quot;parallel_docking&quot;</span>, sub_agents=sub_agents)
+</code></pre>
+<p><strong>Output</strong>: ExperimentMatrix artifact with per-ligand status/energy.</p>
+<h2 id="evolution-agent">Evolution Agent</h2>
+<p><strong>File</strong>: <code>agents/antimatters/_subagents/evolution/agent.py</code></p>
+<p><strong>Tools</strong>:</p>
+<ul>
+<li><code>analyze_experiment_results</code> &#x2014; UCB rankings, SAR discovery</li>
+<li><code>propose_knowledge_items</code>, <code>approve_knowledge_items</code> &#x2014; propose/approve pattern</li>
+<li><code>build_knowledge_graph</code> &#x2014; Neo4j entities/relationships</li>
+<li><code>create_discovery_report</code></li>
+</ul>
+<p><strong>UCB Ranking</strong> (rUCB algorithm):</p>
+<pre><code class="lang-python"><span class="hljs-comment"># evolution/agent.py L250-287</span>
+ucb = -energy + c * sqrt(log(N)/n)  <span class="hljs-comment"># exploitation + exploration</span>
+</code></pre>
+<p><strong>SAR Discovery</strong>:</p>
+<pre><code class="lang-python"><span class="hljs-comment"># evolution/agent.py L294-461</span>
+<span class="hljs-comment"># Compares best vs worst binders to find patterns:</span>
+<span class="hljs-comment"># - Interaction preferences</span>
+<span class="hljs-comment"># - Residue hotspots</span>
+<span class="hljs-comment"># - Functional group correlations</span>
+</code></pre>
+<p><strong>Output</strong>: DiscoveryReport artifact + Neo4j graph.</p>
+<h2 id="state-sharing">State Sharing</h2>
+<pre><code class="lang-python"><span class="hljs-comment"># Research stores:</span>
+tool_context.state[<span class="hljs-string">&quot;latest_protocol_id&quot;</span>] = artifact[<span class="hljs-string">&quot;id&quot;</span>]
+
+<span class="hljs-comment"># Engineer reads:</span>
+protocol_id = tool_context.state.get(<span class="hljs-string">&quot;latest_protocol_id&quot;</span>)
+</code></pre>
+<h2 id="models-used">Models Used</h2>
+<table>
+<thead>
+<tr>
+<th>Agent</th>
+<th>Model</th>
+<th>Reason</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Coordinator</td>
+<td>gemini-2.5-pro</td>
+<td>2M context for workflow</td>
+</tr>
+<tr>
+<td>Research</td>
+<td>gemini-2.5-flash</td>
+<td>Fast tool calls</td>
+</tr>
+<tr>
+<td>Engineer</td>
+<td>gemini-2.5-flash</td>
+<td>Parallel execution</td>
+</tr>
+<tr>
+<td>Evolution</td>
+<td>gemini-2.5-flash</td>
+<td>Analysis + graph</td>
+</tr>
+<tr>
+<td>Frontend</td>
+<td>gemini-3-pro-preview</td>
+<td>Deep reasoning (16k thinking)</td>
+</tr>
+</tbody>
+</table>
+
+                                
+                                </section>
+                            
+    </div>
+    <div class="search-results">
+        <div class="has-results">
+            
+            <h1 class="search-results-title"><span class='search-results-count'></span> results matching "<span class='search-query'></span>"</h1>
+            <ul class="search-results-list"></ul>
+            
+        </div>
+        <div class="no-results">
+            
+            <h1 class="search-results-title">No results matching "<span class='search-query'></span>"</h1>
+            
+        </div>
+    </div>
+</div>
+
+                        </div>
+                    </div>
+                
+            </div>
+
+            
+                
+                <a href="../" class="navigation navigation-prev " aria-label="Previous page: Antimatters">
+                    <i class="fa fa-angle-left"></i>
+                </a>
+                
+                
+                <a href="knowledge-graph.html" class="navigation navigation-next " aria-label="Next page: Knowledge Graph">
+                    <i class="fa fa-angle-right"></i>
+                </a>
+                
+            
+        
+    </div>
+
+    <script>
+        var gitbook = gitbook || [];
+        gitbook.push(function() {
+            gitbook.page.hasChanged({"page":{"title":"Agent Architecture","level":"2.1","depth":1,"next":{"title":"Knowledge Graph","level":"2.2","depth":1,"path":"architecture/knowledge-graph.md","ref":"architecture/knowledge-graph.md","articles":[]},"previous":{"title":"Antimatters","level":"1.1","depth":1,"path":"README.md","ref":"README.md","articles":[]},"dir":"ltr"},"config":{"gitbook":"*","theme":"default","variables":{},"plugins":["livereload"],"pluginsConfig":{"livereload":{},"highlight":{},"search":{},"lunr":{"maxIndexSize":1000000,"ignoreSpecialCharacters":false},"sharing":{"facebook":true,"twitter":true,"google":false,"weibo":false,"instapaper":false,"vk":false,"all":["facebook","google","twitter","weibo","instapaper"]},"fontsettings":{"theme":"white","family":"sans","size":2},"theme-default":{"styles":{"pdf":"styles/pdf.css","epub":"styles/epub.css","mobi":"styles/mobi.css","ebook":"styles/ebook.css","print":"styles/print.css","website":"styles/website.css"},"showLevel":false}},"structure":{"langs":"LANGS.md","readme":"README.md","glossary":"GLOSSARY.md","summary":"SUMMARY.md"},"pdf":{"pageNumbers":true,"fontSize":12,"fontFamily":"Arial","paperSize":"a4","chapterMark":"pagebreak","pageBreaksBefore":"/","margin":{"right":62,"left":62,"top":56,"bottom":56}},"styles":{"pdf":"styles/pdf.css","epub":"styles/epub.css","mobi":"styles/mobi.css","ebook":"styles/ebook.css","print":"styles/print.css","website":"styles/website.css"}},"file":{"path":"architecture/agents.md","mtime":"2026-01-27T16:44:05.875Z","type":"markdown"},"gitbook":{"version":"3.2.3","time":"2026-01-29T05:31:45.870Z"},"basePath":"..","book":{"language":""}});
+        });
+    </script>
+</div>
+
+        
+    <script src="../gitbook/gitbook.js"></script>
+    <script src="../gitbook/theme.js"></script>
+    
+        
+        <script src="../gitbook/gitbook-plugin-livereload/plugin.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-search/search-engine.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-search/search.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-lunr/lunr.min.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-lunr/search-lunr.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-sharing/buttons.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-fontsettings/fontsettings.js"></script>
+        
+    
+
+    </body>
+</html>
+

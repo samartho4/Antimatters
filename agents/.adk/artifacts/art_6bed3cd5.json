@@ -1,0 +1,51 @@
+{
+  "id": "art_6bed3cd5",
+  "type": "protocol",
+  "name": "Protocol: Alpha-Synuclein",
+  "metadata": {
+    "id": "art_6bed3cd5",
+    "type": "ArtifactType.PROTOCOL",
+    "name": "Protocol: Alpha-Synuclein",
+    "created_at": "2026-01-29T07:03:08.885154",
+    "updated_at": "2026-01-29T07:03:14.297823",
+    "version": 2,
+    "parent_id": null,
+    "tags": [
+      "research",
+      "protocol",
+      "PED00024"
+    ],
+    "comments": []
+  },
+  "content": {
+    "ped_id": "PED00024",
+    "protein_name": "Alpha-Synuclein",
+    "protein_pdb_path": "/Users/sam/.idpet/data/PED00024_e001.pdb",
+    "ensemble_id": "e001",
+    "n_conformations": 575,
+    "n_residues": 140,
+    "binding_site_residues": [
+      125,
+      133,
+      136
+    ],
+    "ligands": [
+      {
+        "smiles": "CC(=O)Nc1ccc2c(c1)C(=O)N(C2)C3CCCNC3",
+        "name": "Fasudil"
+      },
+      {
+        "name": "Ligand-47",
+        "smiles": "Cc1ccc(cc1)C(=O)Nc2ccc(cc2)c3ccccc3"
+      }
+    ],
+    "primary_citation": null,
+    "pmcid": null,
+    "figure_urls": [],
+    "validation_status": "validated",
+    "confidence_score": 7.5,
+    "created_at": "2026-01-29T07:03:08.885023",
+    "validation_notes": "Fasudil has documented computational evidence for binding to alpha-synuclein and prediction of its binding site (Semenyuk PI, 2022, PMID: 36232847). Other studies also discuss Fasudil's interaction with alpha-synuclein, supporting its relevance for docking. For Ligand-47, no specific literature directly confirming its binding to alpha-synuclein was found. The protocol utilizes ensemble docking, which is a suitable approach for intrinsically disordered proteins like alpha-synuclein (Dhar A et al., 2025, PMID: 40532196).",
+    "validated_at": "2026-01-29T07:03:14.297453"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "id": "art_4f7fcb01",
+  "type": "discovery_report",
+  "name": "Discovery Report: Alpha-Synuclein",
+  "metadata": {
+    "id": "art_4f7fcb01",
+    "type": "ArtifactType.DISCOVERY_REPORT",
+    "name": "Discovery Report: Alpha-Synuclein",
+    "created_at": "2026-01-29T02:18:02.472076",
+    "updated_at": "2026-01-29T02:18:02.472076",
+    "version": 1,
+    "parent_id": "art_6f084a8d",
+    "tags": [
+      "discovery",
+      "report",
+      "alpha-synuclein"
+    ],
+    "comments": []
+  },
+  "content": {
+    "title": "Discovery Report: Alpha-Synuclein",
+    "executive_summary": "Analyzed 0 ligands against Alpha-Synuclein ensemble.\nTop performer: N/A (N/A kcal/mol).\n0 compounds meet drug-like threshold (\u2264-7.0 kcal/mol).\nDiscovered 0 SAR patterns.\nBuilt knowledge graph with 6 entities.",
+    "analysis_date": "2026-01-29T02:18:02.472042",
+    "energy_stats": {
+      "n_completed": 0
+    },
+    "ucb_rankings": [],
+    "sar_insights": [],
+    "knowledge_graph_id": "art_d8273c02",
+    "recommendations": [],
+    "methodology": {
+      "ranking": "rUCB (Chen et al. 2021)",
+      "sar": "Statistical pattern discovery",
+      "graph": "MedGraphRAG triple-linked structure",
+      "resolution": "Jaro-Winkler similarity"
+    }
+  }
+}

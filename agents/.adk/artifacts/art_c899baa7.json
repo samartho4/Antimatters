@@ -1,0 +1,47 @@
+{
+  "id": "art_c899baa7",
+  "type": "protocol",
+  "name": "Protocol: Alpha-Synuclein",
+  "metadata": {
+    "id": "art_c899baa7",
+    "type": "ArtifactType.PROTOCOL",
+    "name": "Protocol: Alpha-Synuclein",
+    "created_at": "2026-01-29T14:42:07.518071",
+    "updated_at": "2026-01-29T14:42:24.582912",
+    "version": 2,
+    "parent_id": null,
+    "tags": [
+      "research",
+      "protocol",
+      "PED00024"
+    ],
+    "comments": []
+  },
+  "content": {
+    "ped_id": "PED00024",
+    "protein_name": "Alpha-Synuclein",
+    "protein_pdb_path": "/Users/sam/.idpet/data/PED00024_e001.pdb",
+    "ensemble_id": "e001",
+    "n_conformations": 575,
+    "n_residues": 140,
+    "binding_site_residues": [],
+    "ligands": [
+      {
+        "smiles": "CC(=O)Nc1ccc2c(c1)C(=O)N(C2)C3CCCNC3",
+        "name": "Fasudil"
+      },
+      {
+        "smiles": "Cc1ccc(cc1)C(=O)Nc2ccc(cc2)c3ccccc3",
+        "name": "Ligand-47"
+      }
+    ],
+    "primary_citation": null,
+    "pmcid": null,
+    "figure_urls": [],
+    "validation_status": "validated",
+    "confidence_score": 7.5,
+    "created_at": "2026-01-29T14:42:07.517256",
+    "validation_notes": "Fasudil docking to alpha-synuclein is supported by literature (Semenyuk PI, 2022, PMID: 36232847), which predicted binding sites with good agreement with experimental data. For Ligand-47, while not specifically mentioned, the literature broadly supports molecular docking for identifying small molecule ligands and their binding sites on alpha-synuclein (e.g., Waheed ZA et al., 2025, PMID: 41234634; Hwang H et al., 2025, PMID: 41006545; Emani LS et al., 2025, PMID: 40502653; Manimaran D et al., 2025, PMID: 39850503). The user's request for '2 or not more than 3 clusters for ensemble docking' is noted for the engineering phase. No specific binding site residues were identified for PED00024_e001 in the PED entry details.",
+    "validated_at": "2026-01-29T14:42:24.582404"
+  }
+}

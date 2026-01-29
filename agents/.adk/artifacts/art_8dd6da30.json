@@ -1,0 +1,152 @@
+{
+  "id": "art_8dd6da30",
+  "type": "evolution_trace",
+  "name": "Scientific Graph: Alpha-Synuclein",
+  "metadata": {
+    "id": "art_8dd6da30",
+    "type": "ArtifactType.EVOLUTION_TRACE",
+    "name": "Scientific Graph: Alpha-Synuclein",
+    "created_at": "2026-01-29T13:36:36.985666",
+    "updated_at": "2026-01-29T13:36:36.985666",
+    "version": 1,
+    "parent_id": null,
+    "tags": [
+      "knowledge_graph",
+      "scientific",
+      "alpha-synuclein"
+    ],
+    "comments": []
+  },
+  "content": {
+    "entities": [
+      {
+        "entity_id": "exp_protein_b05939f3",
+        "entity_type": "Protein",
+        "level": 1,
+        "name": "Alpha-Synuclein",
+        "properties": {
+          "pdb_path": "/Users/sam/.idpet/data/PED00024_e001.pdb",
+          "n_clusters": 3,
+          "experiment_id": "exp_f14a8306"
+        },
+        "external_ids": {}
+      },
+      {
+        "entity_id": "ref_protein_alpha_synuclein",
+        "entity_type": "Protein",
+        "level": 2,
+        "name": "Alpha-Synuclein",
+        "properties": {},
+        "external_ids": {
+          "uniprot": "P37840",
+          "ped": "PED00006e001"
+        }
+      },
+      {
+        "entity_id": "exp_ligand_68c5727c",
+        "entity_type": "Ligand",
+        "level": 1,
+        "name": "Fasudil",
+        "properties": {
+          "smiles": "CC(=O)Nc1ccc2c(c1)C(=O)N(C2)C3CCCNC3",
+          "best_energy": null,
+          "best_cluster": null,
+          "status": "completed"
+        },
+        "external_ids": {}
+      },
+      {
+        "entity_id": "ref_ligand_fasudil",
+        "entity_type": "Ligand",
+        "level": 2,
+        "name": "Fasudil",
+        "properties": {},
+        "external_ids": {
+          "chembl": "CHEMBL727",
+          "smiles": "CC(=O)Nc1ccc2c(c1)C(=O)N(C2)C3CCCNC3"
+        }
+      },
+      {
+        "entity_id": "exp_ligand_1b5d9497",
+        "entity_type": "Ligand",
+        "level": 1,
+        "name": "Ligand-47",
+        "properties": {
+          "smiles": "Cc1ccc(cc1)C(=O)Nc2ccc(cc2)c3ccccc3",
+          "best_energy": null,
+          "best_cluster": null,
+          "status": "completed"
+        },
+        "external_ids": {}
+      },
+      {
+        "entity_id": "ref_ligand_ligand_47",
+        "entity_type": "Ligand",
+        "level": 2,
+        "name": "Ligand-47",
+        "properties": {},
+        "external_ids": {
+          "smiles": "Cc1ccc(cc1)C(=O)Nc2ccc(cc2)c3ccccc3"
+        }
+      }
+    ],
+    "relationships": [
+      {
+        "relationship_id": "corr_e48a1a82",
+        "subject_id": "exp_protein_b05939f3",
+        "predicate": "CORRESPONDS_TO",
+        "object_id": "ref_protein_alpha_synuclein",
+        "properties": {
+          "resolution_method": "jaro_winkler"
+        }
+      },
+      {
+        "relationship_id": "corr_d7ce405f",
+        "subject_id": "exp_ligand_68c5727c",
+        "predicate": "CORRESPONDS_TO",
+        "object_id": "ref_ligand_fasudil",
+        "properties": {
+          "resolution_method": "jaro_winkler"
+        }
+      },
+      {
+        "relationship_id": "docks_cb6b32e3",
+        "subject_id": "exp_ligand_68c5727c",
+        "predicate": "DOCKS_TO",
+        "object_id": "exp_protein_b05939f3",
+        "properties": {
+          "best_energy": null,
+          "best_cluster": null
+        }
+      },
+      {
+        "relationship_id": "corr_65958d22",
+        "subject_id": "exp_ligand_1b5d9497",
+        "predicate": "CORRESPONDS_TO",
+        "object_id": "ref_ligand_ligand_47",
+        "properties": {
+          "resolution_method": "jaro_winkler"
+        }
+      },
+      {
+        "relationship_id": "docks_264c5472",
+        "subject_id": "exp_ligand_1b5d9497",
+        "predicate": "DOCKS_TO",
+        "object_id": "exp_protein_b05939f3",
+        "properties": {
+          "best_energy": null,
+          "best_cluster": null
+        }
+      }
+    ],
+    "n_entities": 6,
+    "n_relationships": 5,
+    "protein_name": "Alpha-Synuclein",
+    "levels": {
+      "experimental": 3,
+      "reference": 3,
+      "vocabulary": 0
+    },
+    "created_at": "2026-01-29T13:36:36.985616"
+  }
+}

@@ -1,0 +1,463 @@
+
+<!DOCTYPE HTML>
+<html lang="" >
+    <head>
+        <meta charset="UTF-8">
+        <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
+        <title>Parallel Docking · GitBook</title>
+        <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+        <meta name="description" content="">
+        <meta name="generator" content="GitBook 3.2.3">
+        
+        
+        
+    
+    <link rel="stylesheet" href="../gitbook/style.css">
+
+    
+            
+                
+                <link rel="stylesheet" href="../gitbook/gitbook-plugin-highlight/website.css">
+                
+            
+                
+                <link rel="stylesheet" href="../gitbook/gitbook-plugin-search/search.css">
+                
+            
+                
+                <link rel="stylesheet" href="../gitbook/gitbook-plugin-fontsettings/website.css">
+                
+            
+        
+
+    
+
+    
+        
+    
+        
+    
+        
+    
+        
+    
+        
+    
+        
+    
+
+        
+    
+    
+    <meta name="HandheldFriendly" content="true"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <link rel="apple-touch-icon-precomposed" sizes="152x152" href="../gitbook/images/apple-touch-icon-precomposed-152.png">
+    <link rel="shortcut icon" href="../gitbook/images/favicon.ico" type="image/x-icon">
+
+    
+    <link rel="next" href="../reference/api.html" />
+    
+    
+    <link rel="prev" href="molecule-generation.html" />
+    
+
+    </head>
+    <body>
+        
+<div class="book">
+    <div class="book-summary">
+        
+            
+<div id="book-search-input" role="search">
+    <input type="text" placeholder="Type to search" />
+</div>
+
+            
+                <nav role="navigation">
+                
+
+
+<ul class="summary">
+    
+    
+
+    
+
+    
+        
+        
+    
+        <li class="chapter " data-level="1.1" data-path="../">
+            
+                <a href="../">
+            
+                    
+                    Antimatters
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">Architecture</li>
+        
+        
+    
+        <li class="chapter " data-level="2.1" data-path="../architecture/agents.html">
+            
+                <a href="../architecture/agents.html">
+            
+                    
+                    Agent Architecture
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="2.2" data-path="../architecture/knowledge-graph.html">
+            
+                <a href="../architecture/knowledge-graph.html">
+            
+                    
+                    Knowledge Graph
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="2.3" data-path="../architecture/artifacts.html">
+            
+                <a href="../architecture/artifacts.html">
+            
+                    
+                    Artifacts
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="2.4" data-path="../architecture/async-patterns.html">
+            
+                <a href="../architecture/async-patterns.html">
+            
+                    
+                    Async Patterns
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">Components</li>
+        
+        
+    
+        <li class="chapter " data-level="3.1" data-path="../components/mcp-docking.html">
+            
+                <a href="../components/mcp-docking.html">
+            
+                    
+                    MCP Docking Server
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.2" data-path="../components/backend.html">
+            
+                <a href="../components/backend.html">
+            
+                    
+                    Backend API
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.3" data-path="../components/database.html">
+            
+                <a href="../components/database.html">
+            
+                    
+                    Database
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">Guides</li>
+        
+        
+    
+        <li class="chapter " data-level="4.1" data-path="molecule-generation.html">
+            
+                <a href="molecule-generation.html">
+            
+                    
+                    Molecule Generation
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter active" data-level="4.2" data-path="parallel-docking.html">
+            
+                <a href="parallel-docking.html">
+            
+                    
+                    Parallel Docking
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">Reference</li>
+        
+        
+    
+        <li class="chapter " data-level="5.1" data-path="../reference/api.html">
+            
+                <a href="../reference/api.html">
+            
+                    
+                    API Endpoints
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="5.2" data-path="../reference/tools.html">
+            
+                <a href="../reference/tools.html">
+            
+                    
+                    Tool Reference
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+
+    <li class="divider"></li>
+
+    <li>
+        <a href="https://www.gitbook.com" target="blank" class="gitbook-link">
+            Published with GitBook
+        </a>
+    </li>
+</ul>
+
+
+                </nav>
+            
+        
+    </div>
+
+    <div class="book-body">
+        
+            <div class="body-inner">
+                
+                    
+
+<div class="book-header" role="navigation">
+    
+
+    <!-- Title -->
+    <h1>
+        <i class="fa fa-circle-o-notch fa-spin"></i>
+        <a href=".." >Parallel Docking</a>
+    </h1>
+</div>
+
+
+
+
+                    <div class="page-wrapper" tabindex="-1" role="main">
+                        <div class="page-inner">
+                            
+<div id="book-search-results">
+    <div class="search-noresults">
+    
+                                <section class="normal markdown-section">
+                                
+                                <h1 id="parallel-docking">Parallel Docking</h1>
+<h2 id="how-it-works">How It Works</h2>
+<p>Engineer agent uses <code>ParallelAgent</code> to dock multiple ligands concurrently.</p>
+<h3 id="factory-function">Factory Function</h3>
+<pre><code class="lang-python"><span class="hljs-comment"># engineering/agent.py L398-420</span>
+<span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">create_parallel_docking_agent</span><span class="hljs-params">(ligands)</span>:</span>
+    <span class="hljs-string">&quot;&quot;&quot;Create a ParallelAgent with one sub-agent per ligand.&quot;&quot;&quot;</span>
+    sub_agents = []
+    <span class="hljs-keyword">for</span> lig <span class="hljs-keyword">in</span> ligands:
+        sub_agents.append(
+            create_ligand_agent(lig[<span class="hljs-string">&quot;name&quot;</span>], lig[<span class="hljs-string">&quot;smiles&quot;</span>])
+        )
+
+    <span class="hljs-keyword">return</span> ParallelAgent(
+        name=<span class="hljs-string">&quot;parallel_docking&quot;</span>,
+        sub_agents=sub_agents
+    )
+</code></pre>
+<h3 id="per-ligand-agent">Per-Ligand Agent</h3>
+<p>Each sub-agent runs:</p>
+<ol>
+<li><code>prepare_ligand(smiles)</code> &#x2014; SMILES &#x2192; PDBQT</li>
+<li><code>dock_ensemble(pdbqt, frames, protein)</code> &#x2014; Vina docking</li>
+<li><code>analyze_interactions(protein, ligand)</code> &#x2014; contacts</li>
+<li><code>update_ligand_result(experiment_id, ligand_name, result)</code> &#x2014; update matrix</li>
+</ol>
+<h3 id="real-time-updates">Real-Time Updates</h3>
+<pre><code class="lang-python"><span class="hljs-comment"># engineering/agent.py</span>
+<span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">update_ligand_result</span><span class="hljs-params">(experiment_artifact_id, ligand_name, result)</span>:</span>
+    <span class="hljs-string">&quot;&quot;&quot;Update a single ligand&apos;s status in the ExperimentMatrix.&quot;&quot;&quot;</span>
+    artifact = read_artifact(experiment_artifact_id)
+    content = artifact[<span class="hljs-string">&quot;content&quot;</span>]
+
+    <span class="hljs-keyword">for</span> lig <span class="hljs-keyword">in</span> content[<span class="hljs-string">&quot;ligand_results&quot;</span>]:
+        <span class="hljs-keyword">if</span> lig[<span class="hljs-string">&quot;ligand_name&quot;</span>] == ligand_name:
+            lig.update(result)
+            <span class="hljs-keyword">break</span>
+
+    update_artifact(experiment_artifact_id, content)
+</code></pre>
+<p>Frontend receives SSE events as each ligand completes.</p>
+<h2 id="example-flow">Example Flow</h2>
+<pre><code>Protocol: 6 ligands
+      &#x2193;
+ParallelAgent (6 sub-agents)
+      &#x2193;
+&#x250C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x252C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x252C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x252C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x252C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x252C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;
+&#x2502; Lig 1 &#x2502; Lig 2 &#x2502; Lig 3 &#x2502; Lig 4 &#x2502; Lig 5 &#x2502; Lig 6 &#x2502;
+&#x2514;&#x2500;&#x2500;&#x2500;&#x252C;&#x2500;&#x2500;&#x2500;&#x2534;&#x2500;&#x2500;&#x2500;&#x252C;&#x2500;&#x2500;&#x2500;&#x2534;&#x2500;&#x2500;&#x2500;&#x252C;&#x2500;&#x2500;&#x2500;&#x2534;&#x2500;&#x2500;&#x2500;&#x252C;&#x2500;&#x2500;&#x2500;&#x2534;&#x2500;&#x2500;&#x2500;&#x252C;&#x2500;&#x2500;&#x2500;&#x2534;&#x2500;&#x2500;&#x2500;&#x252C;&#x2500;&#x2500;&#x2500;&#x2518;
+    &#x2502;       &#x2502;       &#x2502;       &#x2502;       &#x2502;       &#x2502;
+    &#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2534;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x253C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2534;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2534;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;
+                    &#x2193;
+          ExperimentMatrix updated per completion
+</code></pre><h2 id="ucb-ranking-after-completion">UCB Ranking After Completion</h2>
+<pre><code class="lang-python"><span class="hljs-comment"># evolution/agent.py L250-287</span>
+<span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">calculate_ucb_ranking</span><span class="hljs-params">(ligand_results)</span>:</span>
+    <span class="hljs-string">&quot;&quot;&quot;UCB = -energy + c * sqrt(log(N)/n)&quot;&quot;&quot;</span>
+    <span class="hljs-comment"># Balances exploitation (best energy) vs exploration (uncertainty)</span>
+</code></pre>
+
+                                
+                                </section>
+                            
+    </div>
+    <div class="search-results">
+        <div class="has-results">
+            
+            <h1 class="search-results-title"><span class='search-results-count'></span> results matching "<span class='search-query'></span>"</h1>
+            <ul class="search-results-list"></ul>
+            
+        </div>
+        <div class="no-results">
+            
+            <h1 class="search-results-title">No results matching "<span class='search-query'></span>"</h1>
+            
+        </div>
+    </div>
+</div>
+
+                        </div>
+                    </div>
+                
+            </div>
+
+            
+                
+                <a href="molecule-generation.html" class="navigation navigation-prev " aria-label="Previous page: Molecule Generation">
+                    <i class="fa fa-angle-left"></i>
+                </a>
+                
+                
+                <a href="../reference/api.html" class="navigation navigation-next " aria-label="Next page: API Endpoints">
+                    <i class="fa fa-angle-right"></i>
+                </a>
+                
+            
+        
+    </div>
+
+    <script>
+        var gitbook = gitbook || [];
+        gitbook.push(function() {
+            gitbook.page.hasChanged({"page":{"title":"Parallel Docking","level":"4.2","depth":1,"next":{"title":"API Endpoints","level":"5.1","depth":1,"path":"reference/api.md","ref":"reference/api.md","articles":[]},"previous":{"title":"Molecule Generation","level":"4.1","depth":1,"path":"guides/molecule-generation.md","ref":"guides/molecule-generation.md","articles":[]},"dir":"ltr"},"config":{"gitbook":"*","theme":"default","variables":{},"plugins":["livereload"],"pluginsConfig":{"livereload":{},"highlight":{},"search":{},"lunr":{"maxIndexSize":1000000,"ignoreSpecialCharacters":false},"sharing":{"facebook":true,"twitter":true,"google":false,"weibo":false,"instapaper":false,"vk":false,"all":["facebook","google","twitter","weibo","instapaper"]},"fontsettings":{"theme":"white","family":"sans","size":2},"theme-default":{"styles":{"pdf":"styles/pdf.css","epub":"styles/epub.css","mobi":"styles/mobi.css","ebook":"styles/ebook.css","print":"styles/print.css","website":"styles/website.css"},"showLevel":false}},"structure":{"langs":"LANGS.md","readme":"README.md","glossary":"GLOSSARY.md","summary":"SUMMARY.md"},"pdf":{"pageNumbers":true,"fontSize":12,"fontFamily":"Arial","paperSize":"a4","chapterMark":"pagebreak","pageBreaksBefore":"/","margin":{"right":62,"left":62,"top":56,"bottom":56}},"styles":{"pdf":"styles/pdf.css","epub":"styles/epub.css","mobi":"styles/mobi.css","ebook":"styles/ebook.css","print":"styles/print.css","website":"styles/website.css"}},"file":{"path":"guides/parallel-docking.md","mtime":"2026-01-27T16:45:40.887Z","type":"markdown"},"gitbook":{"version":"3.2.3","time":"2026-01-29T05:31:45.870Z"},"basePath":"..","book":{"language":""}});
+        });
+    </script>
+</div>
+
+        
+    <script src="../gitbook/gitbook.js"></script>
+    <script src="../gitbook/theme.js"></script>
+    
+        
+        <script src="../gitbook/gitbook-plugin-livereload/plugin.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-search/search-engine.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-search/search.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-lunr/lunr.min.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-lunr/search-lunr.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-sharing/buttons.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-fontsettings/fontsettings.js"></script>
+        
+    
+
+    </body>
+</html>
+

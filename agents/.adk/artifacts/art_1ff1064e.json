@@ -1,0 +1,132 @@
+{
+  "id": "art_1ff1064e",
+  "type": "evolution_trace",
+  "name": "Scientific Graph: Alpha-Synuclein",
+  "metadata": {
+    "id": "art_1ff1064e",
+    "type": "ArtifactType.EVOLUTION_TRACE",
+    "name": "Scientific Graph: Alpha-Synuclein",
+    "created_at": "2026-01-29T07:39:57.148552",
+    "updated_at": "2026-01-29T07:39:57.148552",
+    "version": 1,
+    "parent_id": null,
+    "tags": [
+      "knowledge_graph",
+      "scientific",
+      "alpha-synuclein"
+    ],
+    "comments": []
+  },
+  "content": {
+    "entities": [
+      {
+        "entity_id": "exp_protein_33c529e4",
+        "entity_type": "Protein",
+        "level": 1,
+        "name": "Alpha-Synuclein",
+        "properties": {
+          "pdb_path": "/Users/sam/.idpet/data/PED00024_e001.pdb",
+          "n_clusters": 3,
+          "experiment_id": "exp_e13ab102"
+        },
+        "external_ids": {}
+      },
+      {
+        "entity_id": "ref_protein_alpha_synuclein",
+        "entity_type": "Protein",
+        "level": 2,
+        "name": "Alpha-Synuclein",
+        "properties": {},
+        "external_ids": {
+          "uniprot": "P37840",
+          "ped": "PED00006e001"
+        }
+      },
+      {
+        "entity_id": "exp_ligand_f36c2f3d",
+        "entity_type": "Ligand",
+        "level": 1,
+        "name": "Fasudil",
+        "properties": {
+          "smiles": "CC(=O)Nc1ccc2c(c1)C(=O)N(C2)C3CCCNC3",
+          "best_energy": null,
+          "best_cluster": null,
+          "status": "failed"
+        },
+        "external_ids": {}
+      },
+      {
+        "entity_id": "ref_ligand_fasudil",
+        "entity_type": "Ligand",
+        "level": 2,
+        "name": "Fasudil",
+        "properties": {},
+        "external_ids": {
+          "chembl": "CHEMBL727",
+          "smiles": "CC(=O)Nc1ccc2c(c1)C(=O)N(C2)C3CCCNC3"
+        }
+      },
+      {
+        "entity_id": "exp_ligand_105afa62",
+        "entity_type": "Ligand",
+        "level": 1,
+        "name": "Ligand-47",
+        "properties": {
+          "smiles": "Cc1ccc(cc1)C(=O)Nc2ccc(cc2)c3ccccc3",
+          "best_energy": null,
+          "best_cluster": null,
+          "status": "failed"
+        },
+        "external_ids": {}
+      },
+      {
+        "entity_id": "ref_ligand_ligand_47",
+        "entity_type": "Ligand",
+        "level": 2,
+        "name": "Ligand-47",
+        "properties": {},
+        "external_ids": {
+          "smiles": "Cc1ccc(cc1)C(=O)Nc2ccc(cc2)c3ccccc3"
+        }
+      }
+    ],
+    "relationships": [
+      {
+        "relationship_id": "corr_0c1cd274",
+        "subject_id": "exp_protein_33c529e4",
+        "predicate": "CORRESPONDS_TO",
+        "object_id": "ref_protein_alpha_synuclein",
+        "properties": {
+          "resolution_method": "jaro_winkler"
+        }
+      },
+      {
+        "relationship_id": "corr_d15691da",
+        "subject_id": "exp_ligand_f36c2f3d",
+        "predicate": "CORRESPONDS_TO",
+        "object_id": "ref_ligand_fasudil",
+        "properties": {
+          "resolution_method": "jaro_winkler"
+        }
+      },
+      {
+        "relationship_id": "corr_eedb571a",
+        "subject_id": "exp_ligand_105afa62",
+        "predicate": "CORRESPONDS_TO",
+        "object_id": "ref_ligand_ligand_47",
+        "properties": {
+          "resolution_method": "jaro_winkler"
+        }
+      }
+    ],
+    "n_entities": 6,
+    "n_relationships": 3,
+    "protein_name": "Alpha-Synuclein",
+    "levels": {
+      "experimental": 3,
+      "reference": 3,
+      "vocabulary": 0
+    },
+    "created_at": "2026-01-29T07:39:57.148495"
+  }
+}

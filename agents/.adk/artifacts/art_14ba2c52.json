@@ -1,0 +1,49 @@
+{
+  "id": "art_14ba2c52",
+  "type": "protocol",
+  "name": "Protocol: Alpha-Synuclein",
+  "metadata": {
+    "id": "art_14ba2c52",
+    "type": "ArtifactType.PROTOCOL",
+    "name": "Protocol: Alpha-Synuclein",
+    "created_at": "2026-01-28T11:35:39.279700",
+    "updated_at": "2026-01-28T11:35:39.279700",
+    "version": 1,
+    "parent_id": null,
+    "tags": [
+      "research",
+      "protocol",
+      "PED00024"
+    ],
+    "comments": []
+  },
+  "content": {
+    "ped_id": "PED00024",
+    "protein_name": "Alpha-Synuclein",
+    "protein_pdb_path": "/Users/sam/.idpet/data/PED00024_e001.pdb",
+    "ensemble_id": "e001",
+    "n_conformations": 575,
+    "n_residues": null,
+    "binding_site_residues": [
+      125,
+      133,
+      136
+    ],
+    "ligands": [
+      {
+        "name": "Fasudil",
+        "smiles": "CC(=O)Nc1ccc2c(c1)C(=O)N(C2)C3CCCNC3"
+      },
+      {
+        "smiles": "Cc1ccc(cc1)C(=O)Nc2ccc(cc2)c3ccccc3",
+        "name": "Ligand-47"
+      }
+    ],
+    "primary_citation": null,
+    "pmcid": null,
+    "figure_urls": [],
+    "validation_status": "pending",
+    "confidence_score": 0.0,
+    "created_at": "2026-01-28T11:35:39.279647"
+  }
+}
