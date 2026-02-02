@@ -11,7 +11,7 @@ import shutil
 from google.adk.tools.mcp_tool import McpToolset
 from google.adk.tools.mcp_tool.mcp_session_manager import StdioConnectionParams
 from mcp import StdioServerParameters
-from core.agents.config import BIOCONTEXT_TIMEOUT
+from core.agents.config import TIMEOUTS
 
 # Find uvx dynamically
 UVX_PATH = shutil.which("uvx") or "/Users/sam/Library/Python/3.9/bin/uvx"
@@ -33,7 +33,7 @@ biocontext_tools = McpToolset(
             args=["biocontext_kb@latest"],
             env={"MCP_ENVIRONMENT": "DEVELOPMENT", "UV_PYTHON": "3.12"},
         ),
-        timeout=BIOCONTEXT_TIMEOUT,
+        timeout=TIMEOUTS.biocontext,
     ),
     tool_filter=LITERATURE_TOOLS,
 )
