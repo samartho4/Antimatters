@@ -91,47 +91,57 @@ export function Sidebar({
     return acc;
   }, {} as Record<string, Tool[]>);
 
-  // Recent artifacts (last 10)
-  const recentArtifacts = [...artifacts]
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    .slice(0, 10);
 
   if (isCollapsed) {
     return (
-      <div className="w-16 bg-am-secondary border-r border-am-border flex flex-col items-center py-4 gap-4">
+      <aside 
+        className="w-16 md:w-20 bg-am-secondary border-r border-am-border flex flex-col items-center py-4 gap-4"
+        aria-label="Collapsed navigation sidebar"
+      >
         <button
           onClick={onToggleCollapse}
-          className="p-2 text-am-text-secondary hover:text-am-text-primary hover:bg-am-tertiary rounded-lg transition-colors"
+          className="p-3 text-am-text-secondary hover:text-am-text-primary hover:bg-am-tertiary rounded-lg transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+          aria-label="Expand sidebar"
+          aria-expanded="false"
         >
           <PanelLeft className="w-5 h-5" />
         </button>
         <button
           onClick={onNewChat}
-          className="p-2 bg-am-accent text-white rounded-lg hover:bg-am-accent-hover transition-colors"
+          className="p-3 bg-am-accent text-white rounded-lg hover:bg-am-accent-hover transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+          aria-label="Start new research session"
         >
           <Plus className="w-5 h-5" />
         </button>
         <div className="flex-1" />
-        <button className="p-2 text-am-text-muted hover:text-am-text-secondary rounded-lg transition-colors">
+        <button 
+          className="p-3 text-am-text-muted hover:text-am-text-secondary rounded-lg transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+          aria-label="Open settings"
+        >
           <Settings className="w-5 h-5" />
         </button>
-      </div>
+      </aside>
     );
   }
 
   return (
-    <div className="w-60 bg-am-secondary border-r border-am-border flex flex-col h-full">
+    <aside 
+      className="w-60 sm:w-64 md:w-72 lg:w-80 bg-am-secondary border-r border-am-border flex flex-col h-full"
+      aria-label="Main navigation sidebar"
+    >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-am-border">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 bg-am-accent rounded-lg flex items-center justify-center">
+          <div className="w-7 h-7 bg-am-accent rounded-lg flex items-center justify-center" aria-hidden="true">
             <Atom className="w-4 h-4 text-white" />
           </div>
-          <span className="text-sm font-semibold text-am-text-primary">Antimatters</span>
+          <h1 className="text-sm font-semibold text-am-text-primary">Antimatters</h1>
         </div>
         <button
           onClick={onToggleCollapse}
-          className="p-1.5 text-am-text-muted hover:text-am-text-secondary hover:bg-am-tertiary rounded transition-colors"
+          className="p-2 text-am-text-muted hover:text-am-text-secondary hover:bg-am-tertiary rounded transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+          aria-label="Collapse sidebar"
+          aria-expanded="true"
         >
           <PanelLeftClose className="w-4 h-4" />
         </button>
@@ -141,9 +151,10 @@ export function Sidebar({
       <div className="px-3 py-3">
         <button
           onClick={onNewChat}
-          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-am-text-secondary hover:text-am-text-primary hover:bg-am-tertiary rounded-lg transition-colors"
+          className="w-full flex items-center gap-2 px-3 py-3 text-sm text-am-text-secondary hover:text-am-text-primary hover:bg-am-tertiary rounded-lg transition-colors min-h-[44px]"
+          aria-label="Start new research session"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-4 h-4" aria-hidden="true" />
           <span>New Research</span>
         </button>
       </div>
@@ -231,58 +242,45 @@ export function Sidebar({
           </div>
         </SidebarSection>
 
-        {/* EVOLUTION Section - Knowledge & Learnings */}
-        <SidebarSection
-          title="Evolution"
-          icon={Sparkles}
-          isExpanded={expandedSections.evolution}
-          onToggle={() => toggleSection('evolution')}
-          badge={knowledge.length > 0 ? knowledge.length : undefined}
-        >
-          {knowledge.length === 0 ? (
-            <div className="px-3 py-2 text-xs text-am-text-muted">No learnings yet</div>
-          ) : (
-            <div className="space-y-0.5">
-              {knowledge.slice(0, 10).map(item => (
-                <button
-                  key={item.id}
-                  onClick={() => onSelectKnowledge?.(item)}
-                  className="w-full flex items-start gap-2 px-3 py-1.5 text-xs text-am-text-secondary hover:text-am-text-primary hover:bg-am-tertiary rounded-md transition-colors"
-                >
-                  <span className="flex-shrink-0 mt-0.5">
-                    {item.type === 'insight' && '💡'}
-                    {item.type === 'procedure' && '📋'}
-                    {item.type === 'result' && '📊'}
-                    {item.type === 'feedback' && '💬'}
-                    {item.type === 'reference' && '📚'}
-                  </span>
-                  <div className="flex-1 min-w-0 text-left">
-                    <div className="truncate">{item.title}</div>
-                    {item.tags.length > 0 && (
-                      <div className="text-[10px] text-am-text-muted mt-0.5">
-                        {item.tags.slice(0, 2).join(', ')}
-                      </div>
-                    )}
-                  </div>
-                </button>
-              ))}
+        {/* EVOLUTION Section - Opens full Evolution view */}
+        <div className="py-1">
+          <button
+            onClick={() => onSelectKnowledge?.(null as any)}
+            className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-am-text-secondary hover:text-am-text-primary hover:bg-am-tertiary rounded-md transition-colors min-h-[44px]"
+            aria-label={`Open Evolution knowledge browser. ${artifacts.length} artifacts available`}
+          >
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4" aria-hidden="true" />
+              <span>Evolution</span>
+              {artifacts.length > 0 && (
+                <span className="px-1.5 py-0.5 text-[9px] bg-am-tertiary text-am-text-muted rounded-full" aria-hidden="true">
+                  {artifacts.length}
+                </span>
+              )}
             </div>
-          )}
-        </SidebarSection>
+            <ChevronRight className="w-3 h-3 text-am-text-muted" aria-hidden="true" />
+          </button>
+        </div>
       </div>
 
       {/* Footer */}
-      <div className="border-t border-am-border px-2 py-2 space-y-0.5">
-        <button className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-am-text-muted hover:text-am-text-secondary hover:bg-am-tertiary rounded-md transition-colors">
-          <Settings className="w-3.5 h-3.5" />
+      <nav className="border-t border-am-border px-2 py-2 space-y-0.5" aria-label="Settings and help">
+        <button 
+          className="w-full flex items-center gap-2 px-3 py-2 text-xs text-am-text-muted hover:text-am-text-secondary hover:bg-am-tertiary rounded-md transition-colors min-h-[44px]"
+          aria-label="Open settings"
+        >
+          <Settings className="w-4 h-4" aria-hidden="true" />
           <span>Settings</span>
         </button>
-        <button className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-am-text-muted hover:text-am-text-secondary hover:bg-am-tertiary rounded-md transition-colors">
-          <HelpCircle className="w-3.5 h-3.5" />
+        <button 
+          className="w-full flex items-center gap-2 px-3 py-2 text-xs text-am-text-muted hover:text-am-text-secondary hover:bg-am-tertiary rounded-md transition-colors min-h-[44px]"
+          aria-label="Get help and provide feedback"
+        >
+          <HelpCircle className="w-4 h-4" aria-hidden="true" />
           <span>Help & Feedback</span>
         </button>
-      </div>
-    </div>
+      </nav>
+    </aside>
   );
 }
 
@@ -361,10 +359,10 @@ function formatToolName(name: string): string {
 }
 
 function getArtifactTitle(artifact: Artifact): string {
-  if (artifact.type === 'scientific_experiment') return artifact.content?.title || 'Experiment';
+  if (artifact.type === 'scientific_experiment') return (typeof artifact.content?.title === 'string' ? artifact.content.title : null) || 'Experiment';
   if (artifact.type === 'task_list') return 'Task List';
   if (artifact.type === 'structure_3d') return artifact.content?.metadata?.ped_id || 'Structure';
   if (artifact.type === 'docking_result') return 'Docking Results';
-  if (artifact.type === 'ligand_svg') return artifact.content?.name || 'Ligand';
+  if (artifact.type === 'ligand_svg') return (typeof artifact.content?.name === 'string' ? artifact.content.name : null) || 'Ligand';
   return artifact.id.slice(0, 8);
 }

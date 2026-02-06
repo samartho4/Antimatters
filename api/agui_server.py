@@ -177,6 +177,7 @@ class RunAgentInput(BaseModel):
     forwarded_props: Optional[Dict[str, Any]] = None
     # Custom fields for Antimatters
     annotation: Optional[AnnotationRegion] = None
+    mode: Optional[str] = None  # "planning" or "serendipitize" - routes to different agents
 
 
 # =============================================================================
@@ -206,66 +207,6 @@ class ArtifactManager:
                 json.dump(self.artifacts, f, indent=2)
         except Exception as e:
             print(f"Error saving artifacts: {e}")
-
-    def create_experiment(self, run_id: str, title: str) -> Dict:
-        """Create a master experiment artifact."""
-        artifact = {
-            "id": f"experiment_{run_id}",
-            "type": ArtifactType.SCIENTIFIC_EXPERIMENT.value,
-            "run_id": run_id,
-            "created_at": datetime.now().isoformat(),
-            "content": {
-                "title": title,
-                "status": "active",
-                "sections": {
-                    "plan": [],      # Task Lists
-                    "materials": [], # PDBs, Ligands
-                    "results": [],   # Docking Scores, Clusters
-                    "validation": [] # Interaction Maps, Literature
-                }
-            }
-        }
-        self.artifacts[artifact["id"]] = artifact
-        self._save_to_disk()
-        return artifact
-
-    def link_artifact_to_experiment(self, run_id: str, artifact: Dict):
-        """Link a child artifact to the parent experiment."""
-        exp_id = f"experiment_{run_id}"
-        if exp_id in self.artifacts:
-            experiment = self.artifacts[exp_id]
-            atype = artifact["type"]
-            
-            # Determine section based on type
-            if atype == ArtifactType.TASK_LIST.value:
-                experiment["content"]["sections"]["plan"].append(artifact["id"])
-            elif atype == ArtifactType.STRUCTURE_3D.value or atype == "ligand_svg":
-                experiment["content"]["sections"]["materials"].append(artifact["id"])
-            elif atype == ArtifactType.DOCKING_RESULT.value or atype == ArtifactType.CLUSTER_VISUALIZATION.value:
-                experiment["content"]["sections"]["results"].append(artifact["id"])
-            elif atype == ArtifactType.INTERACTION_MAP.value or atype == ArtifactType.LITERATURE_RESULT.value:
-                experiment["content"]["sections"]["validation"].append(artifact["id"])
-            
-            self._save_to_disk()
-
-    def create_task_list(self, run_id: str, tasks: List[Dict]) -> Dict:
-        """Create a task list artifact."""
-        artifact = {
-            "id": f"artifact_{uuid.uuid4().hex[:8]}",
-            "type": ArtifactType.TASK_LIST.value,
-            "run_id": run_id,
-            "created_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat(),
-            "version": 1,
-            "content": {
-                "tasks": tasks,
-                "completed": 0,
-                "total": len(tasks)
-            }
-        }
-        self.artifacts[artifact["id"]] = artifact
-        self._save_to_disk()
-        return artifact
 
     def create_structure_artifact(self, run_id: str, pdb_data: str, metadata: Dict) -> Dict:
         """Create a 3D structure artifact for Mol* visualization."""
@@ -360,20 +301,16 @@ class ArtifactManager:
         self._save_to_disk()
         return artifact
 
-    def update_task_progress(self, artifact_id: str, task_index: int, status: str) -> Dict:
-        """Update task progress in a task list artifact."""
-        if artifact_id in self.artifacts:
-            artifact = self.artifacts[artifact_id]
-            if artifact["type"] == ArtifactType.TASK_LIST.value:
-                artifact["content"]["tasks"][task_index]["status"] = status
-                if status == "completed":
-                    artifact["content"]["completed"] += 1
-                # Increment version on every update
-                artifact["version"] = artifact.get("version", 0) + 1
-                artifact["updated_at"] = datetime.now().isoformat()
-                self._save_to_disk()
-        return self.artifacts.get(artifact_id)
 
+# =============================================================================
+# Known Binding Sites Lookup
+# =============================================================================
+
+KNOWN_BINDING_SITES = {
+    "PED00006e001": [125, 133, 136],  # Alpha-synuclein tyrosine cluster (Y125, Y133, Y136)
+    "PED00006e002": [125, 133, 136],  # Alpha-synuclein variant
+    "PED00024e001": [39, 46, 53],      # Example: other IDP binding site
+}
 
 # =============================================================================
 # ADK Agent Integration with Artifact Generation. Three things need to be done: 1. async computation as parallel agent, think of mission control as agent manager in sidebar name as "compuation" 2. browser testing artifacts as validation and async feedback to evolve, this should also go in evolution tabe either we make comments on docs or images. 3. sidebar should show chat name along with artifact names as bullets
@@ -435,20 +372,30 @@ class ADKAgentRunner:
         # Create a fresh runner for every request to ensure clean MCP sessions
         from google.adk.runners import Runner
         from google.adk.sessions import InMemorySessionService
-        from core.agents.antimatters.coordinator import root_agent
+        from core.agents.antimatters.coordinator import root_agent, planning_agent, docking_workflow
+
+        # Route based on mode — annotation with screenshot always goes to
+        # planning_agent which has Gemini 3 visual-analysis capability.
+        mode = input_data.mode or "serendipitize"
+        if input_data.annotation and input_data.annotation.screenshot_base64:
+            mode = "planning"
+            print(f"🎨 [Mode] Annotation with screenshot → planning_agent (visual analysis)", flush=True)
+        if mode == "planning":
+            selected_agent = planning_agent
+            print(f"🎯 [Mode] Planning mode - using planning_agent", flush=True)
+        else:
+            selected_agent = docking_workflow
+            print(f"🔬 [Mode] Serendipitize mode - using docking_workflow", flush=True)
 
         # Helper to create runner with current model configuration
-        def create_runner_with_models(use_fallback: bool = False):
+        def create_runner_with_models(use_fallback: bool = False, agent=None):
+            agent = agent or selected_agent
             if use_fallback:
-                # Create agent with fallback models from ModelSwitcher
                 try:
                     agent = create_coordinator_with_fallback()
                     print(f"🔄 [ModelFallback] Created agent with fallback models", flush=True)
                 except Exception as fe:
                     print(f"⚠️ [ModelFallback] Failed to create fallback agent: {fe}, using default", flush=True)
-                    agent = root_agent
-            else:
-                agent = root_agent
 
             session_service = InMemorySessionService()
             runner = Runner(
@@ -511,34 +458,46 @@ class ADKAgentRunner:
                 content=user_message
             )
 
-            # Create Experiment Artifact (The Master Container)
-            experiment_title = f"Experiment: {user_message[:50]}..."
-            experiment_artifact = self.artifact_manager.create_experiment(run_id, experiment_title)
-            
-            # Broadcast Experiment
-            yield encoder.encode({
-                "type": EventType.CUSTOM.value,
-                "name": "artifact_created",
-                "value": experiment_artifact,
-            })
-
             # Add annotation context if provided
             if input_data.annotation:
-                annotation_context = f"\n[User annotated region: residues {input_data.annotation.residue_ids}, description: {input_data.annotation.description}]"
+                if input_data.annotation.screenshot_base64:
+                    # Multimodal path: image is attached as the next part.
+                    # Tell planning_agent to analyze it directly — no tool call needed.
+                    annotation_context = (
+                        "\n\n[ANNOTATION] A screenshot of the annotated 3D molecular structure "
+                        "is attached to this message. Analyze the spatial details you see directly "
+                        "from the image: atoms, bonds, hydrogen bonds, hydrophobic contacts, "
+                        "aromatic stacking, distances, geometry. Do NOT call "
+                        "analyze_artifact_visualization — the image is already here."
+                    )
+                else:
+                    annotation_context = (
+                        f"\n[User annotated region: residues {input_data.annotation.residue_ids}, "
+                        f"description: {input_data.annotation.description}]"
+                    )
                 user_message += annotation_context
 
-            # Create initial task list artifact
-            tasks = self._analyze_tasks(user_message)
-            task_artifact = self.artifact_manager.create_task_list(run_id, tasks)
-            self.artifact_manager.link_artifact_to_experiment(run_id, task_artifact)
-
-            # Send task list as activity snapshot
-            yield encoder.encode({
-                "type": EventType.ACTIVITY_SNAPSHOT.value,
-                "messageId": f"activity_{run_id}",
-                "activityType": "TASK_LIST",
-                "content": task_artifact,
-            })
+            # Build the message object — multimodal when annotation includes a screenshot
+            # so Gemini can perform spatial reasoning on the annotated 3D view (AI Studio style).
+            new_message: Any = ADKMessage("user", user_message)
+            if input_data.annotation and input_data.annotation.screenshot_base64:
+                try:
+                    from google.genai import types as genai_types
+                    b64 = input_data.annotation.screenshot_base64
+                    # Strip the data-URL prefix (data:image/png;base64,...)
+                    if ',' in b64:
+                        b64 = b64.split(',', 1)[1]
+                    img_bytes = base64.b64decode(b64)
+                    new_message = genai_types.Content(
+                        role="user",
+                        parts=[
+                            genai_types.Part(text=user_message),
+                            genai_types.Part.from_bytes(data=img_bytes, mime_type="image/png"),
+                        ],
+                    )
+                    print(f"[Multimodal] Annotation screenshot included ({len(img_bytes)} bytes)", flush=True)
+                except Exception as mm_err:
+                    print(f"[Multimodal] Falling back to text-only: {mm_err}", flush=True)
 
             # STEP_STARTED
             yield encoder.encode({
@@ -584,187 +543,217 @@ class ADKAgentRunner:
             # Initialize state
             current_state = dict(input_data.state) if input_data.state else {}
             current_state["run_id"] = run_id
-            current_state["artifacts"] = [task_artifact["id"]]
+            current_state["artifacts"] = []
 
             response_text = ""
             tool_calls_made = []
 
-            # Run the ADK agent with event streaming
-            try:
-                # Based on debugging, run_async returns an async generator
-                async for event in local_runner.run_async(
-                    user_id="agui_user",
-                    session_id=thread_id,
-                    new_message=ADKMessage("user", user_message)
-                ):
-                    # Handle text content
-                    if hasattr(event, 'content') and event.content:
-                        for part in event.content.parts if hasattr(event.content, 'parts') else [event.content]:
-                            if hasattr(part, 'text') and part.text:
-                                yield encoder.encode({
-                                    "type": EventType.TEXT_MESSAGE_CONTENT.value,
-                                    "messageId": message_id,
-                                    "delta": part.text,
-                                })
-                                response_text += part.text
+            # --- helper: extract Google's retryDelay from error payload (seconds) ---
+            def _parse_retry_delay(exc: Exception) -> Optional[float]:
+                """Pull retryDelay from Google's error — checks exc + __cause__ chain.
 
-                            # Handle function calls from ADK
-                            if hasattr(part, 'function_call') and part.function_call:
-                                fc = part.function_call
-                                tool_call_id = str(uuid.uuid4())
-                                tool_name = fc.name if hasattr(fc, 'name') else str(fc)
-                                tool_args = dict(fc.args) if hasattr(fc, 'args') else {}
+                Google embeds the delay in two places:
+                  1. details[].retryDelay field:  'retryDelay': '41s'
+                  2. message text:                'Please retry in 41.489538868s.'
+                """
+                import re
+                # Collect the full error text: the exception itself + any chained cause
+                candidates = [str(exc)]
+                cause = getattr(exc, '__cause__', None)
+                if cause:
+                    candidates.append(str(cause))
+                full_text = " ".join(candidates)
 
-                                # TOOL_CALL_START
-                                yield encoder.encode({
-                                    "type": EventType.TOOL_CALL_START.value,
-                                    "toolCallId": tool_call_id,
-                                    "toolCallName": tool_name,
-                                    "parentMessageId": message_id,
-                                })
+                # Pattern 1: structured retryDelay field (Python dict repr)
+                m = re.search(r"['\"]retryDelay['\"]:\s*['\"](\d+(?:\.\d+)?)s['\"]", full_text)
+                if m:
+                    print(f"[retryDelay] parsed from details field: {m.group(1)}s", flush=True)
+                    return float(m.group(1))
 
-                                # Update task progress
-                                task_idx = self._get_task_for_tool(tool_name, tasks)
-                                if task_idx >= 0:
-                                    updated_artifact = self.artifact_manager.update_task_progress(
-                                        task_artifact["id"], task_idx, "in_progress"
-                                    )
+                # Pattern 2: human-readable message "Please retry in 41.489s."
+                m = re.search(r"[Rr]etry in (\d+(?:\.\d+)?)s", full_text)
+                if m:
+                    print(f"[retryDelay] parsed from message text: {m.group(1)}s", flush=True)
+                    return float(m.group(1))
+
+                # Nothing found — log first 300 chars for debugging next time
+                print(f"[retryDelay] could not parse delay. Error snippet: {full_text[:300]}", flush=True)
+                return None
+
+            MAX_AGENT_RETRIES = 5
+            agent_attempt = 0
+
+            while agent_attempt <= MAX_AGENT_RETRIES:
+                try:
+                    async for event in local_runner.run_async(
+                        user_id="agui_user",
+                        session_id=thread_id,
+                        new_message=new_message
+                    ):
+                        # Handle text content
+                        if hasattr(event, 'content') and event.content:
+                            for part in event.content.parts if hasattr(event.content, 'parts') else [event.content]:
+                                if hasattr(part, 'text') and part.text:
                                     yield encoder.encode({
-                                        "type": EventType.ACTIVITY_DELTA.value,
-                                        "messageId": f"activity_{task_artifact['id']}",
-                                        "activityType": "TASK_LIST",
-                                        "patch": [
-                                            {"op": "replace", "path": f"/content/tasks/{task_idx}/status", "value": "in_progress"},
-                                            {"op": "replace", "path": "/version", "value": updated_artifact.get("version", 1) if updated_artifact else 1}
+                                        "type": EventType.TEXT_MESSAGE_CONTENT.value,
+                                        "messageId": message_id,
+                                        "delta": part.text,
+                                    })
+                                    response_text += part.text
+
+                                # Handle function calls from ADK
+                                if hasattr(part, 'function_call') and part.function_call:
+                                    fc = part.function_call
+                                    tool_call_id = str(uuid.uuid4())
+                                    tool_name = fc.name if hasattr(fc, 'name') else str(fc)
+                                    tool_args = dict(fc.args) if hasattr(fc, 'args') else {}
+
+                                    # TOOL_CALL_START
+                                    yield encoder.encode({
+                                        "type": EventType.TOOL_CALL_START.value,
+                                        "toolCallId": tool_call_id,
+                                        "toolCallName": tool_name,
+                                        "parentMessageId": message_id,
+                                    })
+
+                                    # TOOL_CALL_ARGS
+                                    yield encoder.encode({
+                                        "type": EventType.TOOL_CALL_ARGS.value,
+                                        "toolCallId": tool_call_id,
+                                        "delta": json.dumps(tool_args),
+                                    })
+
+                                    # TOOL_CALL_END
+                                    yield encoder.encode({
+                                        "type": EventType.TOOL_CALL_END.value,
+                                        "toolCallId": tool_call_id,
+                                    })
+
+                                    tool_calls_made.append({
+                                        "id": tool_call_id,
+                                        "name": tool_name,
+                                        "args": tool_args
+                                    })
+
+                                # Handle function responses
+                                if hasattr(part, 'function_response') and part.function_response:
+                                    fr = part.function_response
+                                    tool_name = fr.name if hasattr(fr, 'name') else "unknown"
+                                    result = fr.response if hasattr(fr, 'response') else {}
+
+                                    # Create artifacts based on tool results
+                                    artifact = await self._create_artifact_from_result(
+                                        run_id, tool_name, result,
+                                        conversation_id=conversation["id"],
+                                        workspace_id=workspace_id
+                                    )
+                                    if artifact:
+                                        current_state["artifacts"].append(artifact["id"])
+
+                                        # Also persist to database for search/filtering
+                                        try:
+                                            artifact_service.create(
+                                                artifact_type=artifact.get("type", "unknown"),
+                                                content=artifact.get("content", {}),
+                                                conversation_id=conversation["id"],
+                                                workspace_id=workspace_id,
+                                                title=artifact.get("title") or artifact_service._generate_title(
+                                                    artifact.get("type"), artifact.get("content", {})
+                                                ),
+                                                metadata={"run_id": run_id, "original_id": artifact["id"]}
+                                            )
+                                        except Exception as db_err:
+                                            print(f"Warning: Failed to persist artifact to DB: {db_err}")
+
+                                        # Send artifact as custom event
+                                        yield encoder.encode({
+                                            "type": EventType.CUSTOM.value,
+                                            "name": "artifact_created",
+                                            "value": artifact,
+                                        })
+
+                                    # Update state based on results
+                                    self._update_state_from_result(current_state, tool_name, result)
+
+                                    # Send state delta
+                                    yield encoder.encode({
+                                        "type": EventType.STATE_DELTA.value,
+                                        "delta": [
+                                            {"op": "add", "path": f"/{tool_name}_result", "value": True}
                                         ]
                                     })
 
-                                # TOOL_CALL_ARGS
-                                yield encoder.encode({
-                                    "type": EventType.TOOL_CALL_ARGS.value,
-                                    "toolCallId": tool_call_id,
-                                    "delta": json.dumps(tool_args),
-                                })
+                        # Handle direct text from event
+                        elif hasattr(event, 'text') and event.text:
+                            yield encoder.encode({
+                                "type": EventType.TEXT_MESSAGE_CONTENT.value,
+                                "messageId": message_id,
+                                "delta": event.text,
+                            })
+                            response_text += event.text
 
-                                # TOOL_CALL_END
-                                yield encoder.encode({
-                                    "type": EventType.TOOL_CALL_END.value,
-                                    "toolCallId": tool_call_id,
-                                })
+                    # Stream completed successfully — break out of retry loop
+                    model_switcher.record_success("coordinator")
+                    break
 
-                                tool_calls_made.append({
-                                    "id": tool_call_id,
-                                    "name": tool_name,
-                                    "args": tool_args
-                                })
+                except Exception as e:
+                    import traceback as _tb
+                    error_msg = str(e).lower()
+                    is_429 = "429" in error_msg or "resource_exhausted" in error_msg or "quota" in error_msg
+                    is_503 = "503" in error_msg or "overload" in error_msg or "unavailable" in error_msg
+                    is_retryable = is_429 or is_503
 
-                            # Handle function responses
-                            if hasattr(part, 'function_response') and part.function_response:
-                                fr = part.function_response
-                                tool_name = fr.name if hasattr(fr, 'name') else "unknown"
-                                result = fr.response if hasattr(fr, 'response') else {}
+                    if not is_retryable or agent_attempt >= MAX_AGENT_RETRIES:
+                        # Non-retryable or exhausted all attempts — surface the error
+                        _tb.print_exc()
+                        if agent_attempt >= MAX_AGENT_RETRIES and is_retryable:
+                            yield encoder.encode({
+                                "type": EventType.TEXT_MESSAGE_CONTENT.value,
+                                "messageId": message_id,
+                                "delta": f"\n\n❌ **API quota/overload persists after {MAX_AGENT_RETRIES} retries.** "
+                                         f"Please wait a few minutes and try again, or upgrade your Google API plan.\n",
+                            })
+                        raise e
 
-                                # Create artifacts based on tool results
-                                artifact = await self._create_artifact_from_result(
-                                    run_id, tool_name, result,
-                                    conversation_id=conversation["id"],
-                                    workspace_id=workspace_id
-                                )
-                                if artifact:
-                                    current_state["artifacts"].append(artifact["id"])
-                                    self.artifact_manager.link_artifact_to_experiment(run_id, artifact)
+                    agent_attempt += 1
 
-                                    # Also persist to database for search/filtering
-                                    try:
-                                        artifact_service.create(
-                                            artifact_type=artifact.get("type", "unknown"),
-                                            content=artifact.get("content", {}),
-                                            conversation_id=conversation["id"],
-                                            workspace_id=workspace_id,
-                                            title=artifact.get("title") or artifact_service._generate_title(
-                                                artifact.get("type"), artifact.get("content", {})
-                                            ),
-                                            metadata={"run_id": run_id, "original_id": artifact["id"]}
-                                        )
-                                    except Exception as db_err:
-                                        print(f"Warning: Failed to persist artifact to DB: {db_err}")
+                    # --- determine wait time ---
+                    # 429: honour Google's retryDelay; 503: use backoff
+                    google_delay = _parse_retry_delay(e)
+                    if google_delay is not None:
+                        retry_delay = google_delay + random.uniform(1, 5)  # small jitter on top
+                    else:
+                        retry_delay = min(
+                            RETRY.initial_delay * (RETRY.exponential_base ** agent_attempt),
+                            RETRY.max_delay
+                        ) * (0.5 + random.random())
 
-                                    # Send artifact as custom event
-                                    yield encoder.encode({
-                                        "type": EventType.CUSTOM.value,
-                                        "name": "artifact_created",
-                                        "value": artifact,
-                                    })
+                    # --- build user-facing status ---
+                    if is_429:
+                        status_label = "Rate limit / quota hit (429)"
+                    else:
+                        status_label = "Model overloaded (503)"
 
-                                # Update state based on results
-                                self._update_state_from_result(current_state, tool_name, result)
+                    print(f"⚠️  [{status_label}] attempt {agent_attempt}/{MAX_AGENT_RETRIES} — "
+                          f"waiting {retry_delay:.1f}s before retry...", flush=True)
 
-                                # Send state delta
-                                yield encoder.encode({
-                                    "type": EventType.STATE_DELTA.value,
-                                    "delta": [
-                                        {"op": "add", "path": f"/{tool_name}_result", "value": True}
-                                    ]
-                                })
+                    yield encoder.encode({
+                        "type": EventType.TEXT_MESSAGE_CONTENT.value,
+                        "messageId": message_id,
+                        "delta": f"\n\n⏳ **{status_label}.** Retry {agent_attempt}/{MAX_AGENT_RETRIES} "
+                                 f"in {retry_delay:.0f}s...\n",
+                    })
 
-                                # Mark task completed
-                                task_idx = self._get_task_for_tool(tool_name, tasks)
-                                if task_idx >= 0:
-                                    updated_artifact = self.artifact_manager.update_task_progress(
-                                        task_artifact["id"], task_idx, "completed"
-                                    )
-                                    yield encoder.encode({
-                                        "type": EventType.ACTIVITY_DELTA.value,
-                                        "messageId": f"activity_{task_artifact['id']}",
-                                        "activityType": "TASK_LIST",
-                                        "patch": [
-                                            {"op": "replace", "path": f"/content/tasks/{task_idx}/status", "value": "completed"},
-                                            {"op": "replace", "path": "/content/completed", "value": updated_artifact["content"]["completed"] if updated_artifact else 0},
-                                            {"op": "replace", "path": "/version", "value": updated_artifact.get("version", 1) if updated_artifact else 1}
-                                        ]
-                                    })
+                    await asyncio.sleep(retry_delay)
 
-                    # Handle direct text from event
-                    elif hasattr(event, 'text') and event.text:
-                        yield encoder.encode({
-                            "type": EventType.TEXT_MESSAGE_CONTENT.value,
-                            "messageId": message_id,
-                            "delta": event.text,
-                        })
-                        response_text += event.text
-
-            except Exception as e:
-                # Check if it's a 503 overload error that warrants model fallback
-                error_msg = str(e).lower()
-                is_503_error = any(pattern in error_msg for pattern in ["503", "overload", "unavailable", "resource_exhausted"])
-
-                if is_503_error:
-                    # Record failure and switch to fallback models
+                    # --- switch to fallback model on BOTH 429 and 503 ---
+                    # 429 quota is per-model: switching to a different model
+                    # hits a different RPM bucket immediately.
                     model_switcher.record_failure("coordinator")
                     model_switcher.record_failure("research")
                     model_switcher.record_failure("engineering")
                     model_switcher.record_failure("evolution")
-
-                    # Get status after failure recording
-                    status = model_switcher.get_status()
-                    print(f"⚠️ [503 Detected] Model status: {status}", flush=True)
-
-                    # Notify user that retry is happening
-                    yield encoder.encode({
-                        "type": EventType.TEXT_MESSAGE_CONTENT.value,
-                        "messageId": message_id,
-                        "delta": f"\n\n⚠️ **Model overload detected (503).** Switching to fallback models and retrying...\n",
-                    })
-
-                    # Wait before retry
-                    retry_delay = RETRY.initial_delay * (1 + random.random())
-                    await asyncio.sleep(retry_delay)
-
-                    # Create new runner with fallback models
-                    print(f"🔄 [ModelFallback] Creating new runner with fallback models...", flush=True)
                     local_runner, local_session_service = create_runner_with_models(use_fallback=True)
-
-                    # Recreate session
                     try:
                         await local_session_service.create_session(
                             app_name="agui_core",
@@ -773,50 +762,6 @@ class ADKAgentRunner:
                         )
                     except Exception:
                         pass
-
-                    # Retry the agent call with fallback models
-                    try:
-                        async for event in local_runner.run_async(
-                            user_id="agui_user",
-                            session_id=thread_id,
-                            new_message=ADKMessage("user", user_message)
-                        ):
-                            # Handle text content
-                            if hasattr(event, 'content') and event.content:
-                                for part in event.content.parts if hasattr(event.content, 'parts') else [event.content]:
-                                    if hasattr(part, 'text') and part.text:
-                                        yield encoder.encode({
-                                            "type": EventType.TEXT_MESSAGE_CONTENT.value,
-                                            "messageId": message_id,
-                                            "delta": part.text,
-                                        })
-                                        response_text += part.text
-                            elif hasattr(event, 'text') and event.text:
-                                yield encoder.encode({
-                                    "type": EventType.TEXT_MESSAGE_CONTENT.value,
-                                    "messageId": message_id,
-                                    "delta": event.text,
-                                })
-                                response_text += event.text
-
-                        # Success with fallback!
-                        model_switcher.record_success("coordinator")
-                        print(f"✅ [ModelFallback] Retry succeeded with fallback models", flush=True)
-
-                    except Exception as retry_error:
-                        print(f"❌ [ModelFallback] Retry also failed: {retry_error}", flush=True)
-                        import traceback
-                        traceback.print_exc()
-                        raise retry_error
-
-                else:
-                    # Non-503 error
-                    if "async_generator" in str(e):
-                        print(f"CRITICAL ERROR: run_async returned generator but await failed? {e}", flush=True)
-
-                    import traceback
-                    traceback.print_exc()
-                    raise e
 
             # TEXT_MESSAGE_END
             yield encoder.encode({
@@ -841,6 +786,23 @@ class ADKAgentRunner:
                     current_state.update(dict(session.state))
             except Exception:
                 pass
+
+            # Emit agent artifacts to frontend
+            adk_artifacts_dir = CORE_ROOT / "agents" / ".adk" / "artifacts"
+            if adk_artifacts_dir.exists():
+                for artifact_file in adk_artifacts_dir.glob("*.json"):
+                    try:
+                        with open(artifact_file, "r") as f:
+                            artifact = json.load(f)
+                        artifact_id = artifact.get("id", artifact_file.stem)
+                        if artifact_id not in self.artifact_manager.artifacts:
+                            self.artifact_manager.artifacts[artifact_id] = artifact
+                            yield encoder.encode({
+                                "type": EventType.ACTIVITY_SNAPSHOT.value,
+                                "content": artifact,
+                            })
+                    except Exception as e:
+                        continue
 
             # STATE_SNAPSHOT
             yield encoder.encode({
@@ -916,66 +878,6 @@ class ADKAgentRunner:
                 "message": user_message,
                 "code": error_code,
             })
-# there can be phrase while it thinks whcih tell about antimatters iteslf like physics that realtes to information, compuation and evolution.
-    def _analyze_tasks(self, message: str) -> List[Dict]:
-        """Analyze message to create task list."""
-        tasks = []
-        message_lower = message.lower()
-
-        # Planning mode tasks
-        if "plan" in message_lower or "planning" in message_lower:
-            tasks.append({"name": "Route to planning agent", "status": "pending", "tool": "transfer_to_agent"})
-
-        if "visualiz" in message_lower or "3d" in message_lower or "view" in message_lower:
-            tasks.append({"name": "Create 3D visualization", "status": "pending", "tool": "visualize_ligand_3d"})
-
-        if "generat" in message_lower or "design" in message_lower or "molecule" in message_lower:
-            tasks.append({"name": "Generate molecules", "status": "pending", "tool": "generate_molecules_direct"})
-
-        if "sar" in message_lower or "knowledge graph" in message_lower or "kg" in message_lower:
-            tasks.append({"name": "Query SAR insights", "status": "pending", "tool": "get_sar_from_graph"})
-
-        # Research/docking tasks
-        if "ped" in message_lower or "ensemble" in message_lower or "fetch" in message_lower:
-            tasks.append({"name": "Fetch protein ensemble", "status": "pending", "tool": "fetch_ped_ensemble"})
-
-        if "ligand" in message_lower or "prepare" in message_lower or "smiles" in message_lower:
-            tasks.append({"name": "Prepare ligand", "status": "pending", "tool": "prepare_ligand"})
-
-        if "cluster" in message_lower:
-            tasks.append({"name": "Cluster conformations", "status": "pending", "tool": "cluster_conformations"})
-
-        if "dock" in message_lower:
-            tasks.append({"name": "Dock to ensemble", "status": "pending", "tool": "dock_ensemble"})
-
-        if "analyz" in message_lower or "interaction" in message_lower:
-            tasks.append({"name": "Analyze interactions", "status": "pending", "tool": "analyze_interactions"})
-
-        if "search" in message_lower or "chembl" in message_lower or "compound" in message_lower:
-            tasks.append({"name": "Search compounds", "status": "pending", "tool": "search_compounds"})
-
-        if "paper" in message_lower or "literature" in message_lower or "pubmed" in message_lower or "europepmc" in message_lower:
-            tasks.append({"name": "Search literature", "status": "pending", "tool": "bc_get_europepmc_articles"})
-
-        if "preprint" in message_lower or "biorxiv" in message_lower:
-            tasks.append({"name": "Search preprints", "status": "pending", "tool": "bc_get_recent_biorxiv_preprints"})
-
-        if "scholar" in message_lower or "google scholar" in message_lower:
-            tasks.append({"name": "Search Google Scholar", "status": "pending", "tool": "bc_search_google_scholar_publications"})
-
-        # Default task if nothing specific detected
-        if not tasks:
-            tasks.append({"name": "Process request", "status": "pending", "tool": "general"})
-
-        return tasks
-
-    def _get_task_for_tool(self, tool_name: str, tasks: List[Dict]) -> int:
-        """Get task index for a tool name."""
-        for i, task in enumerate(tasks):
-            if task.get("tool") == tool_name:
-                return i
-        return -1
-
     async def _create_artifact_from_result(self, run_id: str, tool_name: str, result: Any,
                                            conversation_id: str = None, workspace_id: str = None) -> Optional[Dict]:
         """Create appropriate artifact from tool result and persist to database."""
@@ -986,26 +888,20 @@ class ADKAgentRunner:
             artifact_id = result_dict["artifact_id"]
             artifact = None
 
-            # 1. Try SQLite service first
-            try:
-                from core.api.services import artifact_service
-                artifact = artifact_service.get(artifact_id)
-            except Exception as e:
-                print(f"SQLite lookup failed for {artifact_id}: {e}")
+            # 1. .adk/artifacts/ first — this is where agents write in-flight
+            #    updates (e.g. update_task_status).  SQLite is a snapshot taken
+            #    at creation time and will be stale for any mutated artifact.
+            adk_artifacts_dir = CORE_ROOT / "agents" / ".adk" / "artifacts"
+            artifact_file = adk_artifacts_dir / f"{artifact_id}.json"
+            if artifact_file.exists():
+                try:
+                    with open(artifact_file) as f:
+                        artifact = json.load(f)
+                    print(f"Found artifact in .adk/artifacts/: {artifact_id}")
+                except Exception as e:
+                    print(f"Error reading .adk artifact {artifact_id}: {e}")
 
-            # 2. If not in SQLite, check .adk/artifacts/ directory (agent-created artifacts)
-            if not artifact:
-                adk_artifacts_dir = CORE_ROOT / "agents" / ".adk" / "artifacts"
-                artifact_file = adk_artifacts_dir / f"{artifact_id}.json"
-                if artifact_file.exists():
-                    try:
-                        with open(artifact_file) as f:
-                            artifact = json.load(f)
-                        print(f"Found artifact in .adk/artifacts/: {artifact_id}")
-                    except Exception as e:
-                        print(f"Error reading .adk artifact {artifact_id}: {e}")
-
-            # 3. Also check core/data/artifacts/ directory
+            # 2. data/artifacts/ directory (persisted from previous runs)
             if not artifact:
                 data_artifacts_dir = CORE_ROOT / "data" / "artifacts"
                 artifact_file = data_artifacts_dir / f"{artifact_id}.json"
@@ -1016,6 +912,14 @@ class ADKAgentRunner:
                         print(f"Found artifact in data/artifacts/: {artifact_id}")
                     except Exception as e:
                         print(f"Error reading data artifact {artifact_id}: {e}")
+
+            # 3. SQLite as last resort (may be stale for in-flight artifacts)
+            if not artifact:
+                try:
+                    from core.api.services import artifact_service
+                    artifact = artifact_service.get(artifact_id)
+                except Exception as e:
+                    print(f"SQLite lookup failed for {artifact_id}: {e}")
 
             if artifact:
                 # Register with local ArtifactManager for UI persistence/listing
@@ -1028,15 +932,24 @@ class ADKAgentRunner:
 
         if tool_name == "fetch_ped_ensemble":
             pdb_path = result_dict.get("pdb_path")
+            ped_id = result_dict.get("ped_id", "")
             if pdb_path and os.path.exists(pdb_path):
                 try:
                     with open(pdb_path, 'r') as f:
                         pdb_data = f.read()
+
+                    # Look up binding site from result, or from known sites, or default to empty
+                    binding_site = (
+                        result_dict.get("binding_site") or
+                        result_dict.get("binding_site_residues") or
+                        KNOWN_BINDING_SITES.get(ped_id, [])
+                    )
+
                     return self.artifact_manager.create_structure_artifact(
                         run_id, pdb_data, {
-                            "ped_id": result_dict.get("ped_id"),
+                            "ped_id": ped_id,
                             "n_conformations": result_dict.get("n_conformations"),
-                            "binding_site": [125, 133, 136]  # Alpha-synuclein Y125, Y133, Y136
+                            "binding_site": binding_site
                         }
                     )
                 except Exception as e:
@@ -1091,6 +1004,24 @@ class ADKAgentRunner:
 
         elif tool_name == "analyze_interactions":
             return self.artifact_manager.create_interaction_artifact(run_id, result_dict)
+
+        elif tool_name == "generate_molecules_direct":
+            suggestions = result_dict.get("suggestions", [])
+            if suggestions:
+                # Strip redundant coordinates_3d — pdb_block carries the same data
+                clean = [{k: v for k, v in s.items() if k != 'coordinates_3d'} for s in suggestions]
+                return {
+                    "id": f"artifact_{uuid.uuid4().hex[:8]}",
+                    "type": "molecule_suggestions",
+                    "run_id": run_id,
+                    "created_at": datetime.now().isoformat(),
+                    "content": {
+                        "title": "Generated Molecules",
+                        "modification_type": result_dict.get("modification_type", "optimize"),
+                        "generation_method": result_dict.get("generation_method", "smiles_rdkit"),
+                        "suggestions": clean,
+                    }
+                }
 
         return None
 
@@ -1214,6 +1145,40 @@ async def get_model_status():
             "model_rotation_enabled": RETRY.model_rotation_enabled,
         }
     }
+
+
+@app.get("/evolution/graph")
+async def get_evolution_graph(protein_name: str = "Alpha-Synuclein"):
+    """Get knowledge graph from Neo4j via evolution agent.
+
+    Returns entities and relationships for visualization.
+    Leverages existing Neo4j connection and query tools.
+    """
+    try:
+        from core.agents.antimatters._subagents.evolution.agent import query_knowledge_graph
+
+        result = query_knowledge_graph(entity_type=None, property_filter_json=None, limit=200)
+
+        if result.get("success"):
+            return {
+                "entities": result.get("entities", []),
+                "relationships": result.get("relationships", []),
+                "success": True
+            }
+        else:
+            return {
+                "entities": [],
+                "relationships": [],
+                "success": False,
+                "error": result.get("error", "Unknown error")
+            }
+    except Exception as e:
+        return {
+            "entities": [],
+            "relationships": [],
+            "success": False,
+            "error": str(e)
+        }
 
 
 @app.post("/model-status/reset")
@@ -1502,14 +1467,11 @@ async def get_artifact(artifact_id: str):
 async def list_artifacts(run_id: Optional[str] = None):
     """List all artifacts, optionally filtered by run_id.
 
-    Merges artifacts from:
-    1. ArtifactManager (runtime artifacts from agui_server)
-    2. .adk/artifacts/ directory (agent-created artifacts from base.py)
+    Agent artifacts (.adk/artifacts/) take priority - they have real data.
     """
-    # Start with ArtifactManager artifacts
-    artifacts_dict = dict(_agent_runner.artifact_manager.artifacts)
+    artifacts_dict = {}
 
-    # Also load artifacts from .adk/artifacts/ directory (created by agents)
+    # Load agent artifacts first (source of truth)
     adk_artifacts_dir = CORE_ROOT / "agents" / ".adk" / "artifacts"
     if adk_artifacts_dir.exists():
         for artifact_file in adk_artifacts_dir.glob("*.json"):
@@ -1517,7 +1479,6 @@ async def list_artifacts(run_id: Optional[str] = None):
                 with open(artifact_file, "r") as f:
                     artifact = json.load(f)
                 artifact_id = artifact.get("id", artifact_file.stem)
-                # Only add if not already present (avoid duplicates)
                 if artifact_id not in artifacts_dict:
                     # Normalize format for frontend compatibility
                     # Agent artifacts have metadata.created_at, frontend expects top-level created_at
@@ -1551,6 +1512,11 @@ async def list_artifacts(run_id: Optional[str] = None):
                     artifacts_dict[artifact_id] = artifact
             except Exception as e:
                 print(f"Warning: Failed to load artifact {artifact_file}: {e}")
+
+    # Add tool-generated artifacts from ArtifactManager (ligand SVGs, etc.) as fallback
+    for aid, artifact in _agent_runner.artifact_manager.artifacts.items():
+        if aid not in artifacts_dict:
+            artifacts_dict[aid] = artifact
 
     artifacts = list(artifacts_dict.values())
     if run_id:

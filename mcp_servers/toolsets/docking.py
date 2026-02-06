@@ -2,20 +2,18 @@
 from google.adk.tools.mcp_tool import McpToolset
 from google.adk.tools.mcp_tool.mcp_session_manager import StdioConnectionParams
 from mcp import StdioServerParameters
-from core.agents.config import PYTHON_CMD, MCP_SERVERS, TIMEOUTS
+from core.agents.config import MCP_SERVERS, TIMEOUTS
+
+# Docking needs conda Python (has vina installed)
+DOCKING_PYTHON = "/opt/homebrew/Caskroom/miniforge/base/bin/python"
 
 
 def create_docking_tools() -> McpToolset:
-    """Factory to create fresh McpToolset instance.
-
-    Use this for ParallelAgent workers to avoid shared session conflicts.
-    Per GitHub issues #2196, #1267: shared MCP sessions in parallel tasks
-    cause 'cancel scope in different task' errors during cleanup.
-    """
+    """Factory to create fresh McpToolset instance for parallel workers."""
     return McpToolset(
         connection_params=StdioConnectionParams(
             server_params=StdioServerParameters(
-                command=PYTHON_CMD,
+                command=DOCKING_PYTHON,
                 args=[str(MCP_SERVERS["docking"])],
             ),
             timeout=TIMEOUTS.docking,
@@ -23,5 +21,5 @@ def create_docking_tools() -> McpToolset:
     )
 
 
-# Shared instance for sequential use (backward compatibility)
+# Shared instance for sequential use
 docking_tools = create_docking_tools()

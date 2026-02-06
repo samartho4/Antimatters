@@ -72,6 +72,10 @@
     }
   </script>
 
+  <!-- 3Dmol.js — UMD global (window.$3Dmol) for the React molecular viewer.
+       Using CDN avoids bundler/module-interop issues with the UMD build. -->
+  <script src="https://cdn.jsdelivr.net/npm/3dmol@2.5.3/build/3Dmol-min.js"></script>
+
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -140,6 +144,49 @@
         opacity: 1;
         transform: translateY(0);
       }
+    }
+
+    /* Streaming pulse animation for real-time updates */
+    @keyframes streamingPulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+    .animate-streaming {
+      animation: streamingPulse 1.5s ease-in-out infinite;
+    }
+
+    /* Shimmer/skeleton loading animation */
+    @keyframes shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    .skeleton {
+      background: linear-gradient(90deg, #2d323c 25%, #3d424c 50%, #2d323c 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+    }
+
+    /* Typing indicator animation */
+    @keyframes typing {
+      0%, 60%, 100% { transform: translateY(0); }
+      30% { transform: translateY(-4px); }
+    }
+    .animate-typing span:nth-child(1) { animation: typing 1.4s infinite 0s; }
+    .animate-typing span:nth-child(2) { animation: typing 1.4s infinite 0.2s; }
+    .animate-typing span:nth-child(3) { animation: typing 1.4s infinite 0.4s; }
+
+    /* Progress bar animation */
+    @keyframes progressIndeterminate {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(400%); }
+    }
+    .animate-progress-indeterminate {
+      animation: progressIndeterminate 1.5s linear infinite;
+    }
+
+    /* Glow effect for active items */
+    .glow-accent {
+      box-shadow: 0 0 10px rgba(99, 102, 241, 0.3), 0 0 20px rgba(99, 102, 241, 0.1);
     }
   </style>
 </head>

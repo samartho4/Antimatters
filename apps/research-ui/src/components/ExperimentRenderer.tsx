@@ -6,10 +6,10 @@ import {
   BarChart,
   Layers,
   Clock,
-  CheckCircle2,
-  Loader2
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
-import { Artifact, ArtifactType } from '../services/aguiService';
+import { Artifact } from '../services/aguiService';
 import { ArtifactRenderer } from './ArtifactRenderer';
 import { FeedbackOverlay } from './FeedbackOverlay';
 
@@ -20,121 +20,161 @@ interface ExperimentRendererProps {
   onStructureClick: (pdb: string) => void;
 }
 
+type TabKey = 'protocol' | 'data' | 'results' | 'validation';
+
+const TABS: { key: TabKey; label: string; icon: React.ElementType }[] = [
+  { key: 'protocol', label: 'Protocol', icon: FileText },
+  { key: 'data', label: 'Data', icon: Database },
+  { key: 'results', label: 'Results', icon: BarChart },
+  { key: 'validation', label: 'Validation', icon: Layers },
+];
+
 export const ExperimentRenderer: React.FC<ExperimentRendererProps> = ({
   experiment,
   artifacts,
   onFeedback,
   onStructureClick
 }) => {
-  // Defensive destructuring
+  const [activeTab, setActiveTab] = useState<TabKey>('protocol');
+  const [selectedArtifactIndex, setSelectedArtifactIndex] = useState(0);
+
   const content = experiment?.content || {};
   const title = content.title || "Untitled Experiment";
   const sections = content.sections || {};
   const createdAt = experiment?.created_at ? new Date(experiment.created_at) : new Date();
 
-  // Helper to find artifacts by ID list
   const getArtifacts = (ids: string[] = []) =>
     (ids || []).map(id => artifacts.find(a => a.id === id)).filter(Boolean) as Artifact[];
 
-  const planArtifacts = getArtifacts(sections.plan);
-  const materialArtifacts = getArtifacts(sections.materials);
-  const resultArtifacts = getArtifacts(sections.results);
-  const validationArtifacts = getArtifacts(sections.validation);
+  const tabArtifacts: Record<TabKey, Artifact[]> = {
+    protocol: getArtifacts(sections.plan),
+    data: getArtifacts(sections.materials),
+    results: getArtifacts(sections.results),
+    validation: getArtifacts(sections.validation),
+  };
+
+  const currentArtifacts = tabArtifacts[activeTab];
+
+  // Count non-empty tabs
+  const tabCounts = TABS.map(t => ({ ...t, count: tabArtifacts[t.key].length }));
+
+  // Reset selected index when tab changes
+  React.useEffect(() => {
+    setSelectedArtifactIndex(0);
+  }, [activeTab]);
+
+  // Get currently selected artifact
+  const selectedArtifact = currentArtifacts[selectedArtifactIndex];
 
   return (
     <div className="h-full flex flex-col bg-am-primary overflow-hidden">
-      {/* Experiment Header */}
-      <div className="flex-shrink-0 bg-am-secondary border-b border-am-border px-6 py-4">
-        <div className="flex items-center gap-3 mb-1">
-          <div className="p-2 bg-purple-500/20 rounded-lg">
-            <Beaker className="w-5 h-5 text-purple-400" />
+      {/* Header */}
+      <div className="flex-shrink-0 bg-am-secondary border-b border-am-border px-4 py-3">
+        <div className="flex items-center gap-3">
+          <div className="p-1.5 bg-purple-500/20 rounded-lg">
+            <Beaker className="w-4 h-4 text-purple-400" />
           </div>
-          <div>
-            <h2 className="text-lg font-bold text-am-text-primary">{title}</h2>
-            <div className="flex items-center gap-3 text-xs text-am-text-muted">
-              <span className="flex items-center gap-1">
-                <Clock className="w-3 h-3" />
-                {createdAt.toLocaleTimeString()}
-              </span>
-              <span className="flex items-center gap-1 px-2 py-0.5 bg-green-500/10 text-green-400 rounded-full border border-green-500/20">
-                <Loader2 className="w-3 h-3 animate-spin" />
-                Running
-              </span>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-sm font-semibold text-am-text-primary truncate">{title}</h2>
+            <div className="flex items-center gap-2 text-[10px] text-am-text-muted">
+              <Clock className="w-3 h-3" />
+              {createdAt.toLocaleTimeString()}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Notebook Content */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-8">
+      {/* Tabs - Like Claude/ChatGPT artifact selector */}
+      <nav 
+        className="flex-shrink-0 border-b border-am-border bg-am-secondary/50" 
+        role="tablist"
+        aria-label="Experiment sections"
+      >
+        <div className="flex px-2">
+          {tabCounts.map(({ key, label, icon: Icon, count }) => (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              className={`flex items-center gap-1.5 px-3 py-3 text-xs font-medium border-b-2 transition-colors min-h-[44px] ${
+                activeTab === key
+                  ? 'border-am-accent text-am-accent'
+                  : 'border-transparent text-am-text-muted hover:text-am-text-secondary'
+              }`}
+              role="tab"
+              aria-selected={activeTab === key}
+              aria-controls={`${key}-panel`}
+              tabIndex={activeTab === key ? 0 : -1}
+            >
+              <Icon className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>{label}</span>
+              {count > 0 && (
+                <span className={`ml-1 px-1.5 py-0.5 text-[10px] rounded-full ${
+                  activeTab === key ? 'bg-am-accent/20' : 'bg-am-tertiary'
+                }`} aria-label={`${count} items`}>
+                  {count}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      </nav>
 
-        {/* SECTION 1: PROTOCOL */}
-        <section>
-          <SectionHeader icon={FileText} title="Experimental Protocol" count={planArtifacts.length} />
-          <div className="space-y-4">
-            {planArtifacts.map(artifact => (
-              <FeedbackOverlay key={artifact.id} artifactId={artifact.id} onFeedbackSubmit={onFeedback}>
-                <ArtifactRenderer artifact={artifact} />
-              </FeedbackOverlay>
-            ))}
+      {/* Single Artifact View - ONE artifact at a time */}
+      <div 
+        className="flex-1 overflow-y-auto p-4"
+        role="tabpanel"
+        id={`${activeTab}-panel`}
+        aria-labelledby={`${activeTab}-tab`}
+      >
+        {currentArtifacts.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-center">
+            <div className="w-12 h-12 rounded-xl bg-am-tertiary flex items-center justify-center mb-3">
+              {TABS.find(t => t.key === activeTab)?.icon &&
+                React.createElement(TABS.find(t => t.key === activeTab)!.icon, { className: "w-6 h-6 text-am-text-muted" })}
+            </div>
+            <p className="text-sm text-am-text-muted">No {activeTab} artifacts yet</p>
+            <p className="text-xs text-am-text-muted mt-1">They will appear as the experiment progresses</p>
           </div>
-        </section>
-
-        {/* SECTION 2: MATERIALS & DATA */}
-        {materialArtifacts.length > 0 && (
-          <section>
-            <SectionHeader icon={Database} title="Data & Materials" count={materialArtifacts.length} />
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {materialArtifacts.map(artifact => (
-                <FeedbackOverlay key={artifact.id} artifactId={artifact.id} onFeedbackSubmit={onFeedback}>
-                  <ArtifactRenderer
-                    artifact={artifact}
-                    onStructureClick={onStructureClick}
-                  />
-                </FeedbackOverlay>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* SECTION 3: RESULTS & ANALYSIS */}
-        {resultArtifacts.length > 0 && (
-          <section>
-            <SectionHeader icon={BarChart} title="Analysis Results" count={resultArtifacts.length} />
-            <div className="space-y-4">
-              {resultArtifacts.map(artifact => (
-                <FeedbackOverlay key={artifact.id} artifactId={artifact.id} onFeedbackSubmit={onFeedback}>
-                  <ArtifactRenderer artifact={artifact} />
-                </FeedbackOverlay>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* SECTION 4: VALIDATION */}
-        {validationArtifacts.length > 0 && (
-          <section>
-            <SectionHeader icon={Layers} title="Validation & Literature" count={validationArtifacts.length} />
-            <div className="grid grid-cols-1 gap-4">
-              {validationArtifacts.map(artifact => (
-                <FeedbackOverlay key={artifact.id} artifactId={artifact.id} onFeedbackSubmit={onFeedback}>
-                  <ArtifactRenderer artifact={artifact} />
-                </FeedbackOverlay>
-              ))}
-            </div>
-          </section>
+        ) : (
+          <FeedbackOverlay key={selectedArtifact.id} artifactId={selectedArtifact.id} onFeedbackSubmit={onFeedback}>
+            <ArtifactRenderer artifact={selectedArtifact} onStructureClick={onStructureClick} />
+          </FeedbackOverlay>
         )}
       </div>
+
+      {/* Artifact Selector - bottom navigation like Claude artifacts */}
+      {currentArtifacts.length > 1 && (
+        <div className="flex-shrink-0 border-t border-am-border bg-am-secondary px-4 py-2">
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => setSelectedArtifactIndex(Math.max(0, selectedArtifactIndex - 1))}
+              disabled={selectedArtifactIndex === 0}
+              className="p-2 rounded hover:bg-am-tertiary disabled:opacity-30 disabled:cursor-not-allowed transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+              aria-label={`Previous artifact (${selectedArtifactIndex} of ${currentArtifacts.length})`}
+            >
+              <ChevronLeft className="w-4 h-4 text-am-text-muted" />
+            </button>
+
+            <div className="flex items-center gap-2" role="status" aria-live="polite">
+              <span className="text-xs text-am-text-muted">
+                {selectedArtifactIndex + 1} / {currentArtifacts.length}
+              </span>
+              <span className="text-[10px] text-am-text-muted px-2 py-0.5 bg-am-tertiary rounded">
+                {selectedArtifact.type.replace(/_/g, ' ')}
+              </span>
+            </div>
+
+            <button
+              onClick={() => setSelectedArtifactIndex(Math.min(currentArtifacts.length - 1, selectedArtifactIndex + 1))}
+              disabled={selectedArtifactIndex === currentArtifacts.length - 1}
+              className="p-2 rounded hover:bg-am-tertiary disabled:opacity-30 disabled:cursor-not-allowed transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+              aria-label={`Next artifact (${selectedArtifactIndex + 2} of ${currentArtifacts.length})`}
+            >
+              <ChevronRight className="w-4 h-4 text-am-text-muted" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
-
-const SectionHeader = ({ icon: Icon, title, count }: any) => (
-  <div className="flex items-center gap-2 mb-4 pb-2 border-b border-am-border">
-    <Icon className="w-4 h-4 text-am-text-muted" />
-    <h3 className="text-sm font-semibold text-am-text-secondary uppercase tracking-wider">{title}</h3>
-    <span className="ml-auto text-xs bg-am-tertiary px-2 py-0.5 rounded-full text-am-text-muted font-mono">
-      {count} Items
-    </span>
-  </div>
-);

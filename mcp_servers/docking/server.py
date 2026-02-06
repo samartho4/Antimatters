@@ -5,6 +5,7 @@ MCP Server for Ensemble-Based Molecular Docking
 
 from __future__ import annotations  # Enable string annotations for forward references
 from typing import Dict, List, Optional, Tuple, Any, TYPE_CHECKING
+import os
 import tempfile
 import subprocess
 import shutil
@@ -156,10 +157,17 @@ def extract_vina_energy(pdbqt_path: str) -> float:
 
 
 def calculate_box_size(ligand_pdbqt: str) -> float:
-    """Calculate box size from ligand radius + padding (eBoxSize equivalent).
+    """Calculate docking box size from ligand radius of gyration (Rg).
 
-    Original research: run_autodockvina.py get_boxsize() line 28-32
-    Uses ligand diameter + 10 Å padding (Vina standard).
+    Dhar et al. 2025 (J. Chem. Inf. Model.): search space volume is
+    proportional to Rg³.  Reported values:
+        Ligand 47  Rg = 4.23 Å → volume 4561 ų  → box 16.6 Å
+        Fasudil    Rg = 3.48 Å → volume 2220 ų  → box 13.1 Å
+        Ligand 23  Rg = 3.53 Å → volume 2646 ų  → box 13.8 Å
+    Empirical factor:  box_side ≈ 3.86 × Rg  (avg across all three ligands).
+
+    translate_ligand_to_center() handles the per-residue ligand placement
+    independently, so the box need not be oversized as a workaround.
     """
     np = _load_sklearn()[2]
 
@@ -173,16 +181,77 @@ def calculate_box_size(ligand_pdbqt: str) -> float:
                 coords.append([x, y, z])
 
     if not coords:
-        return 20.0  # Fallback
+        return 16.0  # Fallback
 
     coords = np.array(coords)
     centroid = coords.mean(axis=0)
-    distances = np.linalg.norm(coords - centroid, axis=1)
-    max_radius = distances.max()
+    # Radius of gyration: sqrt(mean of squared distances from centroid)
+    rg = float(np.sqrt(np.mean(np.sum((coords - centroid) ** 2, axis=1))))
+    box_size = 3.86 * rg
 
-    # Ligand diameter + 10 Å padding (Vina standard)
-    box_size = (max_radius * 2) + 10.0
-    return max(box_size, 15.0)  # Minimum 15 Å
+    logger.info(f"Box size: Rg={rg:.2f} Å → box={box_size:.1f} Å, volume={box_size**3:.0f} ų")
+    return max(box_size, 10.0)
+
+
+def translate_ligand_to_center(ligand_pdbqt: str, target_center: tuple) -> str:
+    """Translate ligand coordinates so its centroid matches target_center.
+
+    This fixes Vina assertion failures when docking across multiple conformers
+    with different binding site positions. The ligand must start inside the
+    docking box for each conformer.
+
+    Args:
+        ligand_pdbqt: Path to ligand PDBQT file
+        target_center: (x, y, z) tuple of target box center
+
+    Returns:
+        PDBQT content string with translated coordinates
+    """
+    np = _load_sklearn()[2]
+
+    # Read file and extract coordinates
+    lines = []
+    coords = []
+    coord_line_indices = []
+
+    with open(ligand_pdbqt, 'r') as f:
+        for i, line in enumerate(f):
+            lines.append(line)
+            if line.startswith('ATOM') or line.startswith('HETATM'):
+                x = float(line[30:38])
+                y = float(line[38:46])
+                z = float(line[46:54])
+                coords.append([x, y, z])
+                coord_line_indices.append(i)
+
+    if not coords:
+        # No coordinates found, return original content
+        return ''.join(lines)
+
+    coords = np.array(coords)
+    centroid = coords.mean(axis=0)
+    target = np.array(target_center)
+
+    # Calculate translation vector
+    translation = target - centroid
+
+    # Apply translation to all coordinate lines
+    for idx, line_idx in enumerate(coord_line_indices):
+        line = lines[line_idx]
+        new_x = coords[idx, 0] + translation[0]
+        new_y = coords[idx, 1] + translation[1]
+        new_z = coords[idx, 2] + translation[2]
+
+        # PDBQT format: columns 31-38 (x), 39-46 (y), 47-54 (z) are 8 chars each
+        # Format: %8.3f for each coordinate
+        new_line = (
+            line[:30] +
+            f"{new_x:8.3f}{new_y:8.3f}{new_z:8.3f}" +
+            line[54:]
+        )
+        lines[line_idx] = new_line
+
+    return ''.join(lines)
 
 
 def apply_cluster_weights(
@@ -515,8 +584,11 @@ async def dock_ensemble(
             frame.save_pdb(frame_pdb)
 
             frame_pdbqt = f"{temp_dir}/cluster_{cluster_id}_receptor.pdbqt"
-            # Receptor preparation: obabel (fast) or ADFR (publication quality)
-            # Original research: run_autodockvina.py protein_pdbqt_ADFR() line 41-44
+            # Receptor preparation: ADFR (publication quality, Dhar et al. 2025)
+            # preferred when available; falls back to obabel otherwise.
+            effective_prep = "adfr" if ADFR_AVAILABLE else "obabel"
+            if receptor_prep_method == "adfr" or effective_prep == "adfr":
+                receptor_prep_method = "adfr"
             if receptor_prep_method == "adfr":
                 subprocess.run([
                     'prepare_receptor', '-r', frame_pdb, '-A', 'hydrogens', '-o', frame_pdbqt
@@ -539,6 +611,16 @@ async def dock_ensemble(
 
                     comx, comy, comz = get_residue_com(frame, residue)
 
+                    # Translate ligand to box center before docking
+                    # This fixes Vina assertion failures when conformers have different
+                    # binding site positions. Without translation, ligand coordinates
+                    # from PDBQT may fall outside the box for shifted conformers.
+                    # Error: "coords[i] <= m_init[i] + m_range[i]" in szv_grid.cpp
+                    translated_ligand = translate_ligand_to_center(
+                        str(ligand_path),
+                        target_center=(comx, comy, comz)
+                    )
+
                     # Vina's verbosity=0 suppresses all output
                     # REMOVED: os.dup2 pattern was NOT parallel-safe and caused
                     # BrokenPipeError when multiple docking tasks ran concurrently
@@ -546,7 +628,7 @@ async def dock_ensemble(
                     # Ref: https://pybind11.readthedocs.io/en/stable/advanced/pycpp/utilities.html
                     v = Vina(sf_name='vina', verbosity=0)  # verbosity=0 suppresses all output
                     v.set_receptor(frame_pdbqt)
-                    v.set_ligand_from_file(str(ligand_path))
+                    v.set_ligand_from_string(translated_ligand)
                     v.compute_vina_maps(
                         center=[comx, comy, comz],
                         box_size=[box_size, box_size, box_size]
@@ -609,17 +691,33 @@ async def dock_ensemble(
         scores_path = f"{temp_dir}/docking_scores.npy"
         np.save(scores_path, score_array)
 
-        # Save trajectory if we have results
+        # Save docked trajectory: protein + ligand stacked per frame.
+        # Paper (run_autodockvina.py:238): dockedtraj = protein_traj.stack(newligtraj)
+        # trajectory_analysis.py requires the combined topology to select
+        # protein residues and the ligand in the same trajectory.
         trajectory_xtc = None
         trajectory_pdb = None
         if docked_ligand_pdbs:
             try:
                 lig_traj = md.load(docked_ligand_pdbs)
+
+                # Build matching protein frames (same order as docked ligands)
+                protein_frame_pdbs = []
+                for result in all_results:
+                    if result["best_energy"] is not None:
+                        pf = f"{temp_dir}/protein_frame_{result['cluster_id']}.pdb"
+                        protein_traj[result["frame_idx"]].save_pdb(pf)
+                        protein_frame_pdbs.append(pf)
+
+                protein_sub = md.load(protein_frame_pdbs)
+                dockedtraj = protein_sub.stack(lig_traj)
+
                 trajectory_pdb = f"{temp_dir}/docked_trajectory.pdb"
                 trajectory_xtc = f"{temp_dir}/docked_trajectory.xtc"
-                lig_traj.save_xtc(trajectory_xtc)
-                lig_traj[0].save_pdb(trajectory_pdb)
-                logger.info(f"Saved trajectory: {len(docked_ligand_pdbs)} frames")
+                dockedtraj.save_xtc(trajectory_xtc)
+                dockedtraj[0].save_pdb(trajectory_pdb)
+                logger.info(f"Saved stacked trajectory: {len(docked_ligand_pdbs)} frames, "
+                            f"{dockedtraj.n_atoms} atoms (protein + ligand)")
             except Exception as e:
                 logger.warning(f"Could not save trajectory: {e}")
 
@@ -745,9 +843,16 @@ async def analyze_interactions(
             "details": str(e)
         }
 
+## Module-level flag: set at startup, read by dock_ensemble
+ADFR_AVAILABLE = False
+
 if __name__ == "__main__":
     import sys
-    
+
+    # Ensure homebrew bin is on PATH — obabel lives there but conda subprocess
+    # doesn't inherit it.
+    os.environ['PATH'] = '/opt/homebrew/bin:' + os.environ.get('PATH', '')
+
     # Check for optional external tools (warn but don't fail)
     required = ['obabel', 'mk_prepare_ligand.py', 'mk_prepare_receptor.py']
     missing = [cmd for cmd in required if shutil.which(cmd) is None]
@@ -755,6 +860,14 @@ if __name__ == "__main__":
     if missing:
         logger.warning(f"Missing optional commands: {', '.join(missing)}")
         logger.warning("Some tools may not work. Install meeko: pip install meeko gemmi")
-    
+
+    # ADFR suite prepare_receptor — publication-quality receptor prep
+    # (Dhar et al. 2025 uses this exclusively).  Falls back to obabel if absent.
+    if shutil.which('prepare_receptor'):
+        ADFR_AVAILABLE = True
+        logger.info("ADFR prepare_receptor found — will use as default receptor prep")
+    else:
+        logger.info("ADFR prepare_receptor not found — defaulting to obabel receptor prep")
+
     logger.info("Starting MCP Server...")
     mcp.run()

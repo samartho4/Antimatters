@@ -66,6 +66,9 @@ export interface ToolCall {
   id: string;
   name: string;
   args: Record<string, any>;
+  startTime?: number;  // timestamp when tool started
+  endTime?: number;    // timestamp when tool finished
+  duration?: number;   // calculated duration in ms
 }
 
 export interface Tool {
@@ -82,6 +85,8 @@ export interface AnnotationRegion {
   screenshot_base64?: string;
 }
 
+export type ResearchMode = 'planning' | 'serendipitize';
+
 export interface RunAgentInput {
   thread_id?: string;
   run_id?: string;
@@ -90,6 +95,7 @@ export interface RunAgentInput {
   state?: Record<string, any>;
   context?: any[];
   annotation?: AnnotationRegion;
+  mode?: ResearchMode;  // Routes to planning_agent or docking_workflow
 }
 
 // =============================================================================
@@ -113,6 +119,7 @@ export enum ArtifactType {
   // Evolution Phase
   DISCOVERY_REPORT = 'discovery_report',
   EVOLUTION_TRACE = 'evolution_trace',
+  MOLECULE_SUGGESTIONS = 'molecule_suggestions',
   PUBLICATION_FIGURE = 'publication_figure',
 
   // System
@@ -124,16 +131,21 @@ export enum ArtifactType {
 export interface Artifact {
   id: string;
   type: ArtifactType;
+  name?: string;
   run_id: string;
   created_at: string;
   content: any;
 }
 
 export interface TaskListContent {
+  title?: string;  // Dynamic title for the task list
   tasks: Array<{
-    name: string;
+    name?: string;
+    step?: string;  // Alternative to name (from research agent)
     status: 'pending' | 'in_progress' | 'completed';
-    tool: string;
+    tool?: string;
+    details?: string;
+    result?: string;
   }>;
   completed: number;
   total: number;
@@ -262,6 +274,12 @@ export class AGUIService {
   public toolCalls: ToolCall[] = [];
   public messages: Message[] = [];
 
+  // Streaming state tracking for real-time UI feedback
+  public isStreaming: boolean = false;
+  public firstTokenReceived: boolean = false;
+  public streamStartTime: number | null = null;
+  public currentToolName: string | null = null;
+
   /**
    * Check if AG-UI backend is available
    */
@@ -307,7 +325,30 @@ export class AGUIService {
   async getArtifact(artifactId: string): Promise<Artifact> {
     const response = await fetch(`${AGUI_BASE}/artifacts/${artifactId}`);
     if (!response.ok) throw new Error('Artifact not found');
-    return response.json();
+    const data = await response.json();
+    return data.artifact || data;
+  }
+
+  /**
+   * Refresh current artifacts from backend to pick up updates
+   * (e.g., task statuses that were updated on disk during the run)
+   */
+  async refreshCurrentArtifacts(): Promise<void> {
+    if (this.artifacts.length === 0) return;
+    try {
+      const refreshed = await Promise.all(
+        this.artifacts.map(async (a) => {
+          try {
+            return await this.getArtifact(a.id);
+          } catch {
+            return a;
+          }
+        })
+      );
+      this.artifacts = refreshed;
+    } catch (e) {
+      console.warn('Artifact refresh failed:', e);
+    }
   }
 
   /**
@@ -319,6 +360,16 @@ export class AGUIService {
     if (!response.ok) throw new Error('Failed to list artifacts');
     const data = await response.json();
     return data.artifacts;
+  }
+
+  /**
+   * List artifacts by conversation ID
+   */
+  async listArtifactsByConversation(conversationId: string): Promise<Artifact[]> {
+    const response = await fetch(`${AGUI_BASE}/artifacts/by-conversation/${conversationId}`);
+    if (!response.ok) throw new Error('Failed to list artifacts for conversation');
+    const data = await response.json();
+    return data.artifacts || [];
   }
 
   /**
@@ -343,9 +394,17 @@ export class AGUIService {
 
     this.abortController = new AbortController();
 
-    // Reset state for new run
+    // Reset state for new run (following RxJS best practice: emit event for state changes)
     this.toolCalls = [];
-    this.artifacts = [];
+    // DON'T clear artifacts - they should accumulate across runs (Q5 bonus: allArtifacts pattern)
+    // this.artifacts = [];
+
+    // Emit RUN_STARTED immediately so React subscribers sync before backend events arrive
+    // This prevents Simulation Campaign box from showing stale data (Q5: chat robustness)
+    this.eventSubject.next({
+      type: EventType.RUN_STARTED,
+      timestamp: Date.now()
+    });
 
     const response = await fetch(`${AGUI_BASE}/`, {
       method: 'POST',
@@ -399,6 +458,42 @@ export class AGUIService {
    * Process incoming event and update local state
    */
   private processEvent(event: AGUIEvent): void {
+    // Track streaming state based on event type
+    switch (event.type) {
+      case EventType.RUN_STARTED:
+        this.isStreaming = true;
+        this.firstTokenReceived = false;
+        this.streamStartTime = Date.now();
+        this.currentToolName = null;
+        break;
+
+      case EventType.TEXT_MESSAGE_START:
+        this.isStreaming = true;
+        break;
+
+      case EventType.TEXT_MESSAGE_CONTENT:
+        if (!this.firstTokenReceived) {
+          this.firstTokenReceived = true;
+        }
+        break;
+
+      case EventType.TEXT_MESSAGE_END:
+      case EventType.RUN_FINISHED:
+      case EventType.RUN_ERROR:
+        this.isStreaming = false;
+        this.currentToolName = null;
+        break;
+
+      case EventType.TOOL_CALL_START:
+        this.currentToolName = event.toolCallName || null;
+        break;
+
+      case EventType.TOOL_CALL_END:
+        this.currentToolName = null;
+        break;
+    }
+
+    // Process event data
     switch (event.type) {
       case EventType.STATE_SNAPSHOT:
         this.state = event.snapshot || {};
@@ -425,7 +520,8 @@ export class AGUIService {
         this.toolCalls.push({
           id: event.toolCallId,
           name: event.toolCallName,
-          args: {}
+          args: {},
+          startTime: Date.now()
         });
         break;
 
@@ -440,14 +536,28 @@ export class AGUIService {
         }
         break;
 
+      case EventType.TOOL_CALL_END:
+        const endCall = this.toolCalls.find(tc => tc.id === event.toolCallId);
+        if (endCall && endCall.startTime) {
+          endCall.endTime = Date.now();
+          endCall.duration = endCall.endTime - endCall.startTime;
+        }
+        break;
+
       case EventType.CUSTOM:
         if (event.name === 'artifact_created' && event.value) {
-          this.artifacts.push(event.value);
+          // Deduplicate by ID
+          const existingIdx = this.artifacts.findIndex(a => a.id === event.value.id);
+          if (existingIdx >= 0) {
+            this.artifacts[existingIdx] = event.value;
+          } else {
+            this.artifacts.push(event.value);
+          }
         }
         break;
 
       case EventType.ACTIVITY_SNAPSHOT:
-        if (event.content) {
+        if (event.content && event.content.id) {
           const existingIdx = this.artifacts.findIndex(a => a.id === event.content.id);
           if (existingIdx >= 0) {
             this.artifacts[existingIdx] = event.content;
@@ -477,6 +587,10 @@ export class AGUIService {
                 target[pathParts[pathParts.length - 1]] = op.value;
               }
             }
+            // CRITICAL: Create new array reference so React detects the change
+            this.artifacts = [...this.artifacts];
+            // Emit event to notify React subscribers
+            this.eventSubject.next(event);
           }
         }
         break;
@@ -505,23 +619,21 @@ export class AGUIService {
   }
 
   /**
-   * Restore session artifacts
+   * Restore session artifacts (optionally filtered by conversation)
    */
-  async restoreSession(): Promise<void> {
+  async restoreSession(conversationId?: string): Promise<void> {
     try {
-      const artifacts = await this.listArtifacts();
-      this.artifacts = artifacts;
-      
-      // Emit events for each artifact to update subscribers
-      artifacts.forEach(artifact => {
-        this.eventSubject.next({
-          type: EventType.CUSTOM,
-          name: 'artifact_created',
-          value: artifact
-        });
-      });
+      // Don't load all artifacts by default - only load for specific conversation
+      if (conversationId) {
+        const artifacts = await this.listArtifactsByConversation(conversationId);
+        this.artifacts = artifacts;
+      } else {
+        // Start with empty artifacts - they'll be loaded when conversation is selected
+        this.artifacts = [];
+      }
     } catch (e) {
       console.warn('Failed to restore session:', e);
+      this.artifacts = [];
     }
   }
 }
@@ -586,21 +698,39 @@ export function useAGUIAgent() {
   const [toolCalls, setToolCalls] = useState<ToolCall[]>(aguiService.toolCalls);
   const [textContent, setTextContent] = useState('');
 
+  // Streaming state for real-time UI feedback
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [firstTokenReceived, setFirstTokenReceived] = useState(false);
+  const [currentToolName, setCurrentToolName] = useState<string | null>(null);
+
   useEffect(() => {
     const subscription = aguiService.events$.subscribe(event => {
       setState({ ...aguiService.state });
       setArtifacts([...aguiService.artifacts]);
       setToolCalls([...aguiService.toolCalls]);
 
+      // Update streaming state from service
+      setIsStreaming(aguiService.isStreaming);
+      setFirstTokenReceived(aguiService.firstTokenReceived);
+      setCurrentToolName(aguiService.currentToolName);
+
       if (event.type === EventType.TEXT_MESSAGE_CONTENT) {
         setTextContent(prev => prev + (event.delta || ''));
       }
 
-      if (event.type === EventType.RUN_FINISHED || event.type === EventType.RUN_ERROR) {
+      if (event.type === EventType.RUN_FINISHED) {
         setIsRunning(false);
+        setIsStreaming(false);
+        // Refresh artifacts from backend — picks up task status updates
+        // that happened on disk during the run but weren't streamed as events
+        aguiService.refreshCurrentArtifacts().then(() => {
+          setArtifacts([...aguiService.artifacts]);
+        });
       }
 
       if (event.type === EventType.RUN_ERROR) {
+        setIsRunning(false);
+        setIsStreaming(false);
         setError(new Error(event.message));
       }
     });
@@ -608,7 +738,7 @@ export function useAGUIAgent() {
     return () => subscription.unsubscribe();
   }, []);
 
-  const runAgent = useCallback(async (message: string, annotation?: AnnotationRegion) => {
+  const runAgent = useCallback(async (message: string, mode?: ResearchMode, annotation?: AnnotationRegion) => {
     setIsRunning(true);
     setError(null);
     setTextContent('');
@@ -616,6 +746,7 @@ export function useAGUIAgent() {
     try {
       await aguiService.runAgent({
         messages: [aguiService.createUserMessage(message)],
+        mode,
         annotation
       });
     } catch (e) {
@@ -639,6 +770,10 @@ export function useAGUIAgent() {
     toolCalls,
     textContent,
     runAgent,
-    abort
+    abort,
+    // Streaming state for real-time UI feedback
+    isStreaming,
+    firstTokenReceived,
+    currentToolName
   };
 }

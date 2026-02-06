@@ -340,6 +340,15 @@ def create_coordinator_with_fallback():
         root_agent configured with current fallback models
     """
     from google.adk.agents import LlmAgent, SequentialAgent
+    from google.adk.models.google_llm import Gemini
+    from google.genai import types as genai_retry_types
+
+    # ADK internal retry: 3 attempts with 30-60-120s delays keeps retries INSIDE
+    # the agent's LLM loop so SequentialAgent progress is preserved.
+    # The outer agui_server loop is the last-resort fallback only.
+    _internal_retry = genai_retry_types.HttpRetryOptions(
+        attempts=3, initial_delay=30, exp_base=2, http_status_codes=[429, 503]
+    )
 
     # Get current models from switcher
     research_model = model_switcher.get_model("research")
@@ -358,30 +367,29 @@ def create_coordinator_with_fallback():
         research_agent as _research_template
     )
     from core.agents.antimatters._subagents.engineering.agent import (
-        engineer_coordinator as _engineering_template
+        EngineerCoordinator as _EngineerCoordinatorCls
     )
     from core.agents.antimatters._subagents.evolution.agent import (
         evolution_agent as _evolution_template
     )
 
     # Create new agents with fallback models
-    # Note: We copy the configuration but use the fallback model
     research_agent = LlmAgent(
         name=_research_template.name,
-        model=research_model,
+        model=Gemini(model=research_model, retry_options=_internal_retry),
         description=_research_template.description,
         instruction=_research_template.instruction,
         tools=_research_template.tools,
         output_key=getattr(_research_template, 'output_key', None),
     )
 
-    # For engineering, it's a custom BaseAgent - use as-is with model override
-    # The engineering agent handles its own model via config
-    engineer_coordinator = _engineering_template
+    # Engineering: fresh instance required — pydantic rejects re-parenting an
+    # existing BaseAgent that already belongs to the original docking_workflow.
+    engineer_coordinator = _EngineerCoordinatorCls(name="engineer_coordinator")
 
     evolution_agent = LlmAgent(
         name=_evolution_template.name,
-        model=evolution_model,
+        model=Gemini(model=evolution_model, retry_options=_internal_retry),
         description=_evolution_template.description,
         instruction=_evolution_template.instruction,
         tools=_evolution_template.tools,
@@ -400,7 +408,7 @@ def create_coordinator_with_fallback():
 
     planning_agent = LlmAgent(
         name=_planning_template.name,
-        model=evolution_model,
+        model=Gemini(model=evolution_model, retry_options=_internal_retry),
         description=_planning_template.description,
         instruction=_planning_template.instruction,
         tools=_planning_template.tools,
@@ -410,7 +418,7 @@ def create_coordinator_with_fallback():
     # Create root coordinator
     root_agent = LlmAgent(
         name="antimatters_agent",
-        model=coordinator_model,
+        model=Gemini(model=coordinator_model, retry_options=_internal_retry),
         description="Antimatters: IDP docking platform with fallback models",
         instruction="""You coordinate IDP docking with TWO MODES.
 

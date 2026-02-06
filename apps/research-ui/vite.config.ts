@@ -13,6 +13,7 @@ export default defineConfig(({ mode }) => {
     define: {
       'import.meta.env.VITE_API_URL': JSON.stringify(env.VITE_API_URL || 'http://localhost:8000'),
     },
+    // 3dmol loaded via CDN <script> (UMD global) — no bundler dep needed
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
