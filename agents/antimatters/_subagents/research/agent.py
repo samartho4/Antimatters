@@ -1,11 +1,6 @@
 """
 Research Agent: Self-validating research specialist with Protocol artifact.
 
-Inspired by:
-- Antigravity: Progressive disclosure with task lists
-- Schrödinger Maestro: Protein/ligand preparation workflow
-- Real labs: Visual validation with structure images
-
 Features:
 - Task list for research workflow tracking
 - Visual URLs for PED ensemble and ligand structures
@@ -19,6 +14,8 @@ import json
 import logging
 import google.genai.types as genai_types
 from google.adk.agents import LlmAgent
+from google.adk.models.google_llm import Gemini
+from google.genai import types as genai_retry_types
 from core.mcp_servers.toolsets.ped import ped_tools
 
 logger = logging.getLogger(__name__)
@@ -80,7 +77,7 @@ def generate_ligand_image_base64(smiles: str) -> str:
 
 
 # =============================================================================
-# Task List Functions (Antigravity-style)
+# Task List Functions 
 # =============================================================================
 
 async def create_research_task_list(
@@ -89,7 +86,7 @@ async def create_research_task_list(
     tool_context: Any = None
 ) -> dict:
     """
-    Create an Antigravity-style task list for research workflow.
+    Create an task list for research workflow.
 
     Tasks are progressively completed as research proceeds.
     Saves via ADK InMemoryArtifactService for ADK web visibility.
@@ -318,9 +315,9 @@ async def create_protocol(
 
     for lig in ligands:
         if isinstance(lig, dict) and "name" in lig and "smiles" in lig:
-            ligand_data = lig.copy()
             name = lig["name"]
             smiles = lig["smiles"]
+            ligand_data = lig.copy()
         elif isinstance(lig, str):
             # Parse "Name (SMILES: ...)" format
             match = re.match(r"(.+?)\s*\(SMILES:\s*(.+)\)", lig)
@@ -343,6 +340,26 @@ async def create_protocol(
                     continue
         else:
             continue
+
+        # ── SMILES validation ──────────────────────────────────────────
+        # LLMs frequently corrupt SMILES (ring-closure mutations, bad
+        # kekulization).  Validate now so bad strings never reach the
+        # protocol artifact or downstream docking.
+        # Strategy: validate → if bad, try name-based config fallback →
+        #           if still bad, skip the ligand entirely.
+        try:
+            from rdkit import Chem as _Chem
+            if _Chem.MolFromSmiles(smiles) is None:
+                fallback = get_ligand_by_name(name)
+                if fallback and _Chem.MolFromSmiles(fallback.smiles):
+                    print(f"[create_protocol] SMILES invalid for '{name}', replaced with config fallback")
+                    smiles = fallback.smiles
+                    ligand_data["smiles"] = smiles
+                else:
+                    print(f"[create_protocol] SMILES invalid for '{name}' and no valid fallback — skipping ligand")
+                    continue
+        except ImportError:
+            pass  # RDKit not available — proceed as before
 
         # Generate 2D structure image
         b64_img = generate_ligand_image_base64(smiles)
@@ -658,7 +675,7 @@ After validation, provide:
 
 research_agent = LlmAgent(
     name="research_agent",
-    model=MODELS.research,
+    model=Gemini(model=MODELS.research, retry_options=genai_retry_types.HttpRetryOptions(attempts=3, initial_delay=30, exp_base=2, http_status_codes=[429, 503])),
     description="Creates validated Protocol artifacts with embedded visuals for IDP docking experiments",
     instruction=build_research_instruction(),
     tools=[

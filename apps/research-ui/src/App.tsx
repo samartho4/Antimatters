@@ -3,7 +3,7 @@
  * Information -> Computation -> Evolution
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   aguiService,
   useAGUIStatus,
@@ -13,10 +13,12 @@ import {
   Artifact,
   ArtifactType,
   Tool,
+  ResearchMode,
 } from './services/aguiService';
 import { Sidebar } from './components/Sidebar';
 import { Computation } from './components/Computation';
-import { ExperimentRenderer } from './components/ExperimentRenderer';
+import { ArtifactPanel } from './components/ArtifactPanel';
+import { EvolutionView } from './components/EvolutionView';
 import { CopilotKit, useCopilotReadable } from "@copilotkit/react-core";
 import "@copilotkit/react-ui/styles.css";
 
@@ -120,6 +122,9 @@ class ErrorBoundary extends React.Component<
 // =============================================================================
 
 export default function App() {
+  // Get API key from environment variable (fallback for dev)
+  const copilotApiKey = import.meta.env.VITE_COPILOT_API_KEY || '';
+
   return (
     <ErrorBoundary>
       <CopilotKit publicApiKey="ck_pub_7aa7b776ea278992ea22100dd49f8b7b">
@@ -134,18 +139,34 @@ function ResearchEngine() {
   const { events, currentEvent, clearEvents } = useAGUIEvents();
   const { isRunning, state, artifacts, toolCalls, textContent, runAgent, abort } = useAGUIAgent();
 
-  // Make artifacts readable by the Copilot
-  useCopilotReadable({
-    description: "The complete list of scientific artifacts generated in previous experiments.",
-    value: artifacts
-  });
-
   // UI State
-  const [messages, setMessages] = useState<Array<{id: string; role: string; content: string}>>([]);
+  const [messages, setMessages] = useState<Array<{ id: string; role: string; content: string }>>([]);
   const [pdbData, setPdbData] = useState<string | null>(null);
   const [currentTool, setCurrentTool] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [tools, setTools] = useState<Tool[]>([]);
+  const [dismissedArtifacts, setDismissedArtifacts] = useState<Set<string>>(new Set());
+
+  // Filter out dismissed artifacts
+  const visibleArtifacts = artifacts.filter(a => !dismissedArtifacts.has(a.id));
+
+  // Make artifacts readable by the Copilot
+  useCopilotReadable({
+    description: "The complete list of scientific artifacts generated in previous experiments.",
+    value: visibleArtifacts
+  });
+
+  // Accumulated tool calls across all runs in this conversation.
+  // Cleared only on "New Chat" so the Simulation Campaign box persists.
+  const [allToolCalls, setAllToolCalls] = useState<Array<{ id: string; name: string; args: Record<string, any> }>>([]);
+  useEffect(() => {
+    if (toolCalls.length === 0) return;
+    setAllToolCalls(prev => {
+      const seen = new Set(prev.map(tc => tc.id));
+      const fresh = toolCalls.filter(tc => !seen.has(tc.id));
+      return fresh.length ? [...prev, ...fresh] : prev;
+    });
+  }, [toolCalls]);
 
   // Real data from backend
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -154,12 +175,44 @@ function ResearchEngine() {
   const [activeConversationId, setActiveConversationId] = useState<string | undefined>();
   const [knowledge, setKnowledge] = useState<KnowledgeItem[]>([]);
   const [showExperiment, setShowExperiment] = useState(false);
+  const [showEvolution, setShowEvolution] = useState(false);
+
+  // Annotation state
+  const [isAnnotating, setIsAnnotating] = useState(false);
+
+  // Resizable right panel
+  const [panelWidth, setPanelWidth] = useState(400);
+  const isDragging = useRef(false);
+
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isDragging.current = true;
+    const startX = e.clientX;
+    const startWidth = panelWidth;
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!isDragging.current) return;
+      const delta = startX - ev.clientX; // drag left → wider panel
+      setPanelWidth(Math.max(280, Math.min(600, startWidth + delta)));
+    };
+    const onMouseUp = () => {
+      isDragging.current = false;
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }, [panelWidth]);
 
   // Fetch workspaces on mount
   useEffect(() => {
+    const abortController = new AbortController();
+
     const fetchWorkspaces = async () => {
       try {
-        const response = await fetch(`${API_BASE}/workspaces`);
+        const response = await fetch(`${API_BASE}/workspaces`, {
+          signal: abortController.signal
+        });
         if (response.ok) {
           const data = await response.json();
           setWorkspaces(data.workspaces || []);
@@ -169,65 +222,109 @@ function ResearchEngine() {
           }
         }
       } catch (e) {
-        // Backend not available yet
+        // Backend not available yet or request aborted
+        if ((e as Error).name !== 'AbortError') {
+          console.warn('Failed to fetch workspaces:', e);
+        }
       }
     };
     fetchWorkspaces();
+
+    return () => abortController.abort();
   }, []);
 
   // Fetch conversations when workspace changes
   useEffect(() => {
+    if (!activeWorkspaceId) return;
+
+    const abortController = new AbortController();
+
     const fetchConversations = async () => {
-      if (!activeWorkspaceId) return;
       try {
-        const response = await fetch(`${API_BASE}/conversations?workspace_id=${activeWorkspaceId}`);
+        const response = await fetch(`${API_BASE}/conversations?workspace_id=${activeWorkspaceId}`, {
+          signal: abortController.signal
+        });
         if (response.ok) {
           const data = await response.json();
           setConversations(data.conversations || []);
         }
       } catch (e) {
-        // Backend not available yet
+        // Backend not available yet or request aborted
+        if ((e as Error).name !== 'AbortError') {
+          console.warn('Failed to fetch conversations:', e);
+        }
       }
     };
     fetchConversations();
+
+    return () => abortController.abort();
   }, [activeWorkspaceId]);
 
   // Fetch knowledge (Evolution) when workspace changes
   useEffect(() => {
+    if (!activeWorkspaceId) return;
+
+    const abortController = new AbortController();
+
     const fetchKnowledge = async () => {
-      if (!activeWorkspaceId) return;
       try {
-        const response = await fetch(`${API_BASE}/knowledge?workspace_id=${activeWorkspaceId}`);
+        const response = await fetch(`${API_BASE}/knowledge?workspace_id=${activeWorkspaceId}`, {
+          signal: abortController.signal
+        });
         if (response.ok) {
           const data = await response.json();
           setKnowledge(data.knowledge || []);
         }
       } catch (e) {
-        console.log('Knowledge endpoint not available');
+        if ((e as Error).name !== 'AbortError') {
+          console.log('Knowledge endpoint not available');
+        }
       }
     };
     fetchKnowledge();
+
+    return () => abortController.abort();
   }, [activeWorkspaceId]);
 
-  // Restore artifacts on load
+  // Load artifacts when conversation changes
   useEffect(() => {
-    aguiService.restoreSession();
-  }, []);
+    const loadArtifacts = async () => {
+      if (activeConversationId) {
+        try {
+          await aguiService.restoreSession(activeConversationId);
+        } catch (e) {
+          console.warn('Failed to load artifacts for conversation:', e);
+        }
+      } else {
+        // No active conversation - clear artifacts
+        aguiService.artifacts = [];
+      }
+    };
+    loadArtifacts();
+  }, [activeConversationId]);
 
   // Fetch tools on mount
   useEffect(() => {
+    const abortController = new AbortController();
+
     const fetchTools = async () => {
       try {
-        const response = await fetch(`${API_BASE}/tools`);
+        const response = await fetch(`${API_BASE}/tools`, {
+          signal: abortController.signal
+        });
         if (response.ok) {
           const data = await response.json();
           setTools(data.tools || []);
         }
       } catch (e) {
-        console.log('Tools endpoint not available');
+        if ((e as Error).name !== 'AbortError') {
+          console.log('Tools endpoint not available');
+        }
       }
     };
     fetchTools();
+
+    return () => abortController.abort();
   }, []);
 
   // Handle AG-UI events
@@ -279,8 +376,8 @@ function ResearchEngine() {
     }
   }, [currentEvent, clearEvents]);
 
-  // Send message
-  const handleSend = useCallback(async (message: string) => {
+  // Send message with mode routing and optional annotation
+  const handleSend = useCallback(async (message: string, mode?: ResearchMode) => {
     if (!message.trim() || status !== 'online') return;
 
     const userMsg = { id: `u-${Date.now()}`, role: 'user', content: message };
@@ -309,27 +406,44 @@ function ResearchEngine() {
     }
 
     try {
-      await runAgent(message);
+      await runAgent(message, mode);
     } catch (e) {
       console.error(e);
     }
   }, [status, runAgent, activeConversationId, activeWorkspaceId]);
 
-  // Handle feedback
-  const handleFeedback = (artifactId: string, comment: string) => {
-    const steeringPrompt = `[USER FEEDBACK on Artifact ${artifactId.slice(0,8)}]: "${comment}". Please adjust your plan or analysis based on this.`;
+  // Annotation handlers
+  const handleStartAnnotation = useCallback(() => {
+    setIsAnnotating(true);
+  }, []);
+
+  // Unified: annotation drawing + question → multimodal send to Gemini
+  const handleAnnotationSend = useCallback((annotation: any, question: string) => {
     setMessages(prev => [...prev, {
-      id: `feedback-${Date.now()}`,
+      id: `u-${Date.now()}`,
       role: 'user',
-      content: `Feedback: ${comment}`
+      content: question
     }]);
-    runAgent(steeringPrompt);
-  };
+    runAgent(question, undefined, annotation);
+    setIsAnnotating(false);
+  }, [runAgent]);
+
+  const handleCancelAnnotation = useCallback(() => {
+    setIsAnnotating(false);
+  }, []);
+
+  // Dismiss artifact (hide from view)
+  const handleDismissArtifact = useCallback((artifactId: string) => {
+    setDismissedArtifacts(prev => new Set(prev).add(artifactId));
+  }, []);
 
   // New chat
   const handleNewChat = () => {
     setMessages([]);
-    setActiveConversationId(undefined);
+    setAllToolCalls([]);
+    setDismissedArtifacts(new Set()); // Clear dismissed artifacts on new chat
+    setActiveConversationId(undefined); // This will trigger artifact reload (clear)
+    aguiService.artifacts = []; // Immediately clear artifacts from service
     setShowExperiment(false);
     setPdbData(null);
   };
@@ -352,60 +466,90 @@ function ResearchEngine() {
     setShowExperiment(true);
   };
 
-  const hasExperiment = artifacts.some(a => a.type === 'scientific_experiment');
-
   return (
     <div className="h-screen w-full bg-am-primary flex overflow-hidden">
-      {/* Sidebar */}
-      <Sidebar
-        tools={tools}
-        artifacts={artifacts}
-        conversations={conversations}
-        knowledge={knowledge}
-        onNewChat={handleNewChat}
-        onSelectConversation={handleSelectConversation}
-        onSelectTool={handleSelectTool}
-        onSelectArtifact={handleArtifactClick}
-        onSelectKnowledge={(item) => {
-          console.log('Selected knowledge:', item);
-          // TODO: Show knowledge detail modal
-        }}
-        activeConversationId={activeConversationId}
-        isCollapsed={sidebarCollapsed}
-        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-      />
+      {/* Skip Navigation Link */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-4 focus:left-4 focus:px-4 focus:py-2 focus:bg-am-accent focus:text-white focus:rounded-lg focus:outline-none focus:ring-2 focus:ring-am-accent"
+      >
+        Skip to main content
+      </a>
 
-      {/* Main Computation Area */}
-      <div className="flex-1 flex overflow-hidden">
-        <Computation
-          messages={messages}
+      {/* Evolution View (Full Screen) */}
+      {showEvolution ? (
+        <EvolutionView
           artifacts={artifacts}
-          toolCalls={toolCalls}
-          isRunning={isRunning}
-          currentTool={currentTool}
-          textContent={textContent}
-          onSend={handleSend}
-          onAbort={abort}
-          onArtifactClick={handleArtifactClick}
-          onStructureClick={(pdb) => setPdbData(pdb)}
-          status={status}
-          workspaces={workspaces}
-          activeWorkspaceId={activeWorkspaceId}
-          onWorkspaceChange={setActiveWorkspaceId}
+          conversations={conversations}
+          onClose={() => setShowEvolution(false)}
         />
+      ) : (
+        <>
+          {/* Sidebar */}
+          <Sidebar
+            tools={tools}
+            artifacts={visibleArtifacts}
+            conversations={conversations}
+            knowledge={knowledge}
+            onNewChat={handleNewChat}
+            onSelectConversation={handleSelectConversation}
+            onSelectTool={handleSelectTool}
+            onSelectArtifact={handleArtifactClick}
+            onSelectKnowledge={() => setShowEvolution(true)}
+            activeConversationId={activeConversationId}
+            isCollapsed={sidebarCollapsed}
+            onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+          />
 
-        {/* Experiment Panel (Right Side) */}
-        {showExperiment && hasExperiment && (
-          <div className="w-[45%] bg-am-secondary border-l border-am-border flex flex-col">
-            <ExperimentRenderer
-              experiment={artifacts.find(a => a.type === 'scientific_experiment')!}
-              artifacts={artifacts}
-              onFeedback={handleFeedback}
+          {/* Main Computation Area */}
+          <div id="main-content" className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+            <Computation
+              messages={messages}
+              artifacts={visibleArtifacts}
+              toolCalls={allToolCalls}
+              isRunning={isRunning}
+              currentTool={currentTool}
+              textContent={textContent}
+              onSend={handleSend}
+              onAbort={abort}
+              onArtifactClick={handleArtifactClick}
               onStructureClick={(pdb) => setPdbData(pdb)}
+              status={status}
+              workspaces={workspaces}
+              activeWorkspaceId={activeWorkspaceId}
+              onWorkspaceChange={setActiveWorkspaceId}
+              onStartAnnotation={handleStartAnnotation}
             />
+
+            {/* Drag handle + Artifact Panel (Right Side) */}
+            {artifacts.length > 0 && (
+              <>
+                {/* Resize grip — desktop only */}
+                <div
+                  className="hidden lg:block flex-shrink-0 w-1.5 cursor-col-resize hover:bg-am-accent/30 bg-am-border/40 transition-colors"
+                  onMouseDown={handleDragStart}
+                  aria-label="Resize artifact panel"
+                />
+                <aside
+                  className="flex-shrink-0 bg-am-primary border-t lg:border-t-0 lg:border-l border-am-border flex flex-col"
+                  aria-label="Artifact viewer"
+                  style={{ width: panelWidth }}
+                >
+                  <ArtifactPanel
+                    artifacts={visibleArtifacts}
+                    onStructureClick={(pdb) => setPdbData(pdb)}
+                    onClose={handleDismissArtifact}
+                    isAnnotating={isAnnotating}
+                    onStartAnnotation={handleStartAnnotation}
+                    onAnnotationSend={handleAnnotationSend}
+                    onCancelAnnotation={handleCancelAnnotation}
+                  />
+                </aside>
+              </>
+            )}
           </div>
-        )}
-      </div>
+        </>
+      )}
     </div>
   );
 }

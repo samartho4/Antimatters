@@ -54,7 +54,16 @@ if env_path.exists():
 import gemini_config  # noqa: F401
 
 from google.adk.agents import LlmAgent, SequentialAgent  # SequentialAgent for guaranteed multi-step execution
+from google.adk.models.google_llm import Gemini
+from google.genai import types as genai_retry_types
 from config import MODELS  # Import model configuration
+
+# ADK internal retry: 3 attempts with 30/60/120 s delays.  Retries happen
+# INSIDE the agent's LLM loop so SequentialAgent progress is preserved.
+# The outer agui_server loop is the last-resort (model-switch) fallback only.
+_INTERNAL_RETRY = genai_retry_types.HttpRetryOptions(
+    attempts=3, initial_delay=30, exp_base=2, http_status_codes=[429, 503]
+)
 
 from ._subagents.research import research_agent
 from ._subagents.engineering import engineer_coordinator  # NEW: Custom BaseAgent
@@ -83,13 +92,18 @@ docking_workflow = SequentialAgent(
 # Planning agent - PLANNING MODE for fast molecule generation (no docking)
 # Dual-mode: SMILES (reliable) or RCMT (experimental, precise 3D)
 # ADK best practice: Clear description for routing
-from ._subagents.evolution.agent import get_sar_from_graph, get_binding_hotspots
+from ._subagents.evolution.agent import (
+    get_sar_from_graph,
+    get_binding_hotspots,
+    query_knowledge_graph,
+    create_interaction_relationship
+)
 # 3D Interactive Visualization (py3Dmol with zoom/inspect) - for planning_agent
 from ._subagents.engineering.agent import visualize_docking_result
 
 planning_agent = LlmAgent(
     name="planning_agent",
-    model=MODELS.evolution,
+    model=Gemini(model=MODELS.evolution, retry_options=_INTERNAL_RETRY),
     description="PLANNING MODE: Fast molecule generation using KG + SAR + Gemini. Also provides 3D visualization (py3Dmol) and visual analysis/annotation. Use for: 'plan', 'design', 'generate', 'show 3D', 'visualize', 'analyze image', 'annotate'. No docking.",
     instruction="""You are PLANNING MODE - fast molecule generation without docking simulation.
 
@@ -152,16 +166,25 @@ TWO OPTIONS based on what data you have:
    - Requires: Run "analyze" workflow first to have experiment_artifact_id
    - Shows: H-bonds (blue), hydrophobic (green), aromatic (purple)
 
-**VISUAL ANALYSIS (Gemini 3 Agentic Vision):**
-Use these tools to analyze/annotate existing artifact images:
-- analyze_artifact_visualization(artifact_filename, analysis_prompt, zoom_region):
-  - Analyzes artifact images using Gemini 3's Think-Act-Observe loop
-  - Can zoom, crop, annotate, and inspect molecular visualizations
-  - Examples: "cluster_overlay_alpha_synuclein.png", "ligand_fasudil.png"
-- generate_publication_figure(experiment_artifact_id, figure_type):
-  - Creates publication-ready figures (sar_summary, energy_landscape, interaction_heatmap, ucb_ranking)
-- annotate_interaction_image(image_path, interaction_data_json):
-  - Adds arrows, boxes, labels to highlight binding sites and interactions
+**MULTIMODAL SPATIAL ANALYSIS (Gemini 3 with Code Execution):**
+
+When user sends annotated 3D structure screenshot (attached as image):
+1. Analyze directly using your native multimodal vision - NO tool call needed
+2. Identify spatial interactions: H-bonds, pi-stacking, hydrophobic contacts, distances
+3. Extract residue-level details: which residues interact, interaction types, geometry
+4. Query graph for entity IDs: call query_knowledge_graph(entity_type="Ligand") to find ligand_id
+5. Store findings: call create_interaction_relationship(ligand_id, residue_id, interaction_type, properties_json)
+
+Example workflow:
+- User annotates Y129 region → you see H-bond between ligand and Y129 hydroxyl
+- Call query_knowledge_graph(entity_type="Ligand", property_filter_json='{"name":"fasudil"}') → get ligand_id
+- Call query_knowledge_graph(entity_type="Residue", property_filter_json='{"residue_number":129}') → get residue_id
+- Call create_interaction_relationship(ligand_id, residue_id, "h_bond", '{"distance_angstrom": 2.8}')
+
+**VISUAL ANALYSIS TOOLS (for existing artifacts only):**
+- analyze_artifact_visualization: For analyzing EXISTING artifact images (cluster_overlay.png, etc)
+- generate_publication_figure: Create publication figures from experiment results
+- annotate_interaction_image: Add arrows/labels to existing images
 """,
     tools=[
         generate_molecules_direct,  # Direct - NO approval needed
@@ -169,6 +192,9 @@ Use these tools to analyze/annotate existing artifact images:
         get_binding_hotspots,
         analyze_experiment_results,
         prepare_suggestions_for_docking,
+        # Neo4j Knowledge Graph Tools
+        query_knowledge_graph,  # Query entities from Neo4j
+        create_interaction_relationship,  # Store spatial findings
         # 3D Interactive Visualization (py3Dmol)
         visualize_ligand_3d,  # De novo - NO prior docking needed
         visualize_docking_result,  # After docking - shows interactions
@@ -182,7 +208,7 @@ Use these tools to analyze/annotate existing artifact images:
 
 root_agent = LlmAgent(
     name="antimatters_agent",
-    model=MODELS.coordinator,  # Use configured Gemini 3 Pro
+    model=Gemini(model=MODELS.coordinator, retry_options=_INTERNAL_RETRY),
     description="Antimatters: IDP docking platform with Analysis and Planning modes",
     instruction="""You coordinate IDP docking with TWO MODES.
 

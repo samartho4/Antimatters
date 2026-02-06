@@ -1,17 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
-  Bot,
   Terminal,
   Database,
   ChevronRight,
   ChevronDown,
   CheckCircle2,
-  AlertCircle,
   Clock,
-  ArrowRight,
-  Cpu,
   Beaker,
-  FileCode,
   Activity,
   Loader2,
   Network
@@ -24,44 +19,84 @@ interface TraceStreamProps {
   currentTool: string | null;
 }
 
+/**
+ * TraceStream — collapsible execution trace for the current run.
+ *
+ * Design decisions (first-principles):
+ *   1. Progressive disclosure  – the heavy detail tree is hidden by default
+ *      once the run completes.  Users who want to inspect can expand it.
+ *   2. Auto-expand while live  – during an active run the tree stays open so
+ *      the user can watch tools execute in real-time.
+ *   3. Compact summary when collapsed – a single line tells you how many
+ *      tools ran and the overall status without taking up scroll space.
+ */
 export function TraceStream({ toolCalls, isRunning, currentTool }: TraceStreamProps) {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const wasRunning = useRef(isRunning);
+
+  // Auto-collapse the moment the run finishes; re-expand if a new run starts.
+  useEffect(() => {
+    if (wasRunning.current && !isRunning) {
+      setIsCollapsed(true);   // run just finished → collapse
+    }
+    if (isRunning) {
+      setIsCollapsed(false);  // still running  → keep open
+    }
+    wasRunning.current = isRunning;
+  }, [isRunning]);
+
   return (
-    <div className="flex flex-col space-y-4 my-6 font-sans">
-      {/* Level 1: Goal / Root Node */}
-      <div className="flex items-center gap-3 px-4 py-3 bg-am-secondary border border-am-border rounded-xl">
-        <div className="p-2 bg-am-accent/20 rounded-lg">
+    <div className="my-2 font-sans">
+      {/* ── Header (always visible, clickable) ── */}
+      <button
+        onClick={() => setIsCollapsed(prev => !prev)}
+        className="w-full flex items-center gap-3 px-4 py-3 bg-am-secondary border border-am-border rounded-xl hover:border-am-accent/50 transition-colors text-left"
+      >
+        <div className="p-2 bg-am-accent/20 rounded-lg flex-shrink-0">
           <Activity className={`w-5 h-5 text-am-accent ${isRunning ? 'animate-pulse' : ''}`} />
         </div>
-        <div>
-          <h3 className="text-sm font-semibold text-am-text-primary">Simulation Campaign</h3>
+
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold text-am-text-primary">Simulation Campaign</div>
           <div className="text-xs text-am-text-muted font-mono flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full ${isRunning ? 'bg-green-400 animate-pulse' : 'bg-am-text-muted'}`} />
+            <span className={`w-2 h-2 rounded-full ${isRunning ? 'bg-green-400 animate-pulse' : 'bg-green-500'}`} />
             {isRunning ? 'EXECUTING' : 'COMPLETED'}
+            {/* compact tool-count badge when collapsed */}
+            {isCollapsed && (
+              <span className="ml-2">• {toolCalls.length} tool{toolCalls.length !== 1 ? 's' : ''}</span>
+            )}
           </div>
         </div>
-      </div>
 
-      {/* Level 2 & 3: The Stream */}
-      <div className="relative pl-6 border-l-2 border-am-border ml-6 space-y-6">
-        {toolCalls.map((call, idx) => (
-          <TraceNode key={call.id} call={call} isLast={idx === toolCalls.length - 1} isRunning={isRunning} />
-        ))}
+        {isCollapsed
+          ? <ChevronRight className="w-4 h-4 text-am-text-muted flex-shrink-0" />
+          : <ChevronDown  className="w-4 h-4 text-am-text-muted flex-shrink-0" />
+        }
+      </button>
 
-        {/* Active Tool Indicator */}
-        {isRunning && currentTool && (
-          <div className="relative pl-8 animate-fade-in">
-            <div className="absolute -left-[29px] top-0 bg-am-primary p-1">
-              <div className="w-3 h-3 bg-am-accent rounded-full ring-4 ring-am-primary animate-pulse" />
+      {/* ── Expandable body ── */}
+      {!isCollapsed && (
+        <div className="relative pl-6 border-l-2 border-am-border ml-6 space-y-4 mt-4">
+          {toolCalls.map((call, idx) => (
+            <TraceNode key={call.id} call={call} isLast={idx === toolCalls.length - 1} isRunning={isRunning} />
+          ))}
+
+          {/* Active tool pulse — only while the run is live */}
+          {isRunning && currentTool && (
+            <div className="relative pl-8 animate-fade-in">
+              <div className="absolute -left-[29px] top-0 bg-am-primary p-1">
+                <div className="w-3 h-3 bg-am-accent rounded-full ring-4 ring-am-primary animate-pulse" />
+              </div>
+              <div className="flex items-center gap-2 px-3 py-2 bg-am-accent/10 border border-am-accent/30 rounded-lg">
+                <Loader2 className="w-3 h-3 text-am-accent animate-spin" />
+                <span className="text-xs font-mono text-am-accent">
+                  EXEC :: {currentTool}
+                </span>
+              </div>
             </div>
-            <div className="flex items-center gap-2 px-3 py-2 bg-am-accent/10 border border-am-accent/30 rounded-lg">
-              <Loader2 className="w-3 h-3 text-am-accent animate-spin" />
-              <span className="text-xs font-mono text-am-accent">
-                EXEC :: {currentTool}
-              </span>
-            </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -124,17 +159,13 @@ function TraceNode({ call, isLast, isRunning }: { call: ToolCall, isLast: boolea
                 ))}
               </div>
 
-              {/* Status Footer */}
-              <div className="flex items-center justify-between pt-2 text-am-text-muted border-t border-am-border mt-2">
-                <div className="flex items-center gap-1">
+              {/* Execution time - only show if available */}
+              {call.duration != null && (
+                <div className="flex items-center gap-1 pt-2 text-am-text-muted border-t border-am-border mt-2">
                   <Clock className="w-3 h-3" />
-                  <span>1.24s</span>
+                  <span>{(call.duration / 1000).toFixed(2)}s</span>
                 </div>
-                <div className="flex items-center gap-1 text-green-400">
-                  <CheckCircle2 className="w-3 h-3" />
-                  <span>VERIFIED</span>
-                </div>
-              </div>
+              )}
 
             </div>
           </div>

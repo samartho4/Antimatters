@@ -7,7 +7,7 @@ from core.agents.config import MCP_SERVERS, TIMEOUTS
 chembl_tools = McpToolset(
     connection_params=StdioConnectionParams(
         server_params=StdioServerParameters(
-            command="node",
+            command="/opt/homebrew/Cellar/node/25.4.0/bin/node",
             args=[str(MCP_SERVERS["chembl"])],
         ),
         timeout=TIMEOUTS.chembl,

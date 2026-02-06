@@ -1,7 +1,7 @@
 """
 Engineer Agent: Parallel docking with Experiment Matrix artifact.
 
-Inspired by Schrödinger LiveDesign LiveReport:
+LiveDesign:
 - Real-time matrix of ligands × properties
 - Parallel processing with independent status tracking
 - Each ligand runs asynchronously
@@ -12,6 +12,7 @@ Uses ADK ParallelAgent for concurrent execution.
 import secrets
 import json
 import asyncio
+import async_timeout  # Python 3.10 compatible timeout
 import logging
 from pathlib import Path
 from datetime import datetime
@@ -36,7 +37,7 @@ WORKER_RETRY_CONFIG = types.HttpRetryOptions(
     exp_base=2,           # Exponential backoff: 2s, 4s, 8s, 16s, 32s
     http_status_codes=[429, 500, 503, 504],  # Retry on rate limits and server errors
 )
-from core.mcp_servers.toolsets.docking import docking_tools, create_docking_tools
+from core.mcp_servers.toolsets.docking import docking_tools, create_docking_tools, DOCKING_PYTHON
 from core.agents.config import (
     MODELS,
     THRESHOLDS,
@@ -658,6 +659,10 @@ class EngineerCoordinator(BaseAgent):
         """Execute complete docking workflow with guaranteed parallel completion."""
         run_id = secrets.token_hex(4)
 
+        # Initialize representative_frames early (will be populated by clustering phase)
+        representative_frames = []
+        cluster_populations = []
+
         try:
             # ============================================================
             # PHASE 1: SETUP (Sequential)
@@ -706,7 +711,7 @@ class EngineerCoordinator(BaseAgent):
                 author=self.name,
                 content=types.Content(
                     role=self.name,
-                    parts=[types.Part(text=f"Starting docking workflow for {protein_name} with {len(ligands)} ligands...")]
+                    parts=[types.Part(text=f"Starting docking for {protein_name} with {len(ligands)} ligands")]
                 )
             )
 
@@ -716,7 +721,7 @@ class EngineerCoordinator(BaseAgent):
                 experiment_name=f"{protein_name} Docking",
                 protein_pdb_path=protein_pdb_path,
                 ligands=ligands,
-                n_clusters=3,
+                n_clusters=len(representative_frames) if representative_frames else 2,  # Use REAL count from clustering
                 tool_context=ctx  # InvocationContext - will use .session.state
             )
             artifact_id = artifact["id"]
@@ -734,7 +739,7 @@ class EngineerCoordinator(BaseAgent):
                     "name": f"{protein_name} Docking",
                     "experiment_id": artifact["content"]["experiment_id"],
                     "protein_pdb_path": protein_pdb_path,
-                    "n_clusters": 3,
+                    "n_clusters": len(representative_frames) if representative_frames else 2,  # Use REAL count
                     "ligands": [
                         {"name": lig["name"], "smiles": lig["smiles"], "status": "queued"}
                         for lig in ligands
@@ -800,7 +805,7 @@ class EngineerCoordinator(BaseAgent):
                 author=self.name,
                 content=types.Content(
                     role=self.name,
-                    parts=[types.Part(text=f"Clustering protein conformations from {protein_pdb_path}...")]
+                    parts=[types.Part(text="Clustering protein conformations...")]
                 )
             )
 
@@ -808,14 +813,11 @@ class EngineerCoordinator(BaseAgent):
             from mcp import ClientSession
             from mcp.client.stdio import stdio_client
             from mcp import StdioServerParameters as MCPStdioServerParameters
-            from core.agents.config import PYTHON_CMD, MCP_SERVERS
-
-            representative_frames = []
-            cluster_populations = []
+            from core.agents.config import MCP_SERVERS
 
             try:
                 server_params = MCPStdioServerParameters(
-                    command=PYTHON_CMD,
+                    command=DOCKING_PYTHON,
                     args=[str(MCP_SERVERS["docking"])],
                 )
 
@@ -887,7 +889,7 @@ class EngineerCoordinator(BaseAgent):
                 author=self.name,
                 content=types.Content(
                     role=self.name,
-                    parts=[types.Part(text=f"Starting parallel docking for {len(ligands)} ligands (direct MCP)...")]
+                    parts=[types.Part(text=f"Running docking simulations for {len(ligands)} ligands...")]
                 )
             )
 
@@ -901,7 +903,7 @@ class EngineerCoordinator(BaseAgent):
 
                 try:
                     server_params = MCPStdioServerParameters(
-                        command=PYTHON_CMD,
+                        command=DOCKING_PYTHON,
                         args=[str(MCP_SERVERS["docking"])],
                     )
 
@@ -909,9 +911,9 @@ class EngineerCoordinator(BaseAgent):
 
                     # Open log file and pass to stdio_client for stderr capture
                     # Use timeout to prevent hanging on subprocess issues
-                    DOCKING_TIMEOUT = 7200  # 2 hours per ligand
+                    DOCKING_TIMEOUT = 21600  # 6 hours per ligand
                     with open(log_file_path, 'w') as errlog:
-                        async with asyncio.timeout(DOCKING_TIMEOUT):
+                        async with async_timeout.timeout(DOCKING_TIMEOUT):
                             async with stdio_client(server_params, errlog=errlog) as (read, write):
                                 async with ClientSession(read, write) as session:
                                     await session.initialize()
@@ -925,16 +927,17 @@ class EngineerCoordinator(BaseAgent):
                                     )
                                     prep_data = json.loads(prep_result.content[0].text)
                                     if not prep_data.get('success'):
-                                        logger.error(f"[{ligand_name}] Prepare failed: {prep_data.get('error')}")
+                                        logger.error(f"[{ligand_name}] Prepare failed: {prep_data.get('error')} — {prep_data.get('details', '')}")
                                         return {"status": "error", "ligand": ligand_name, "error": prep_data.get('error', 'prepare failed')}
 
                                     pdbqt_path = prep_data['pdbqt_path']
+                                    props = prep_data.get('properties', {})
                                     ligand_props = {
-                                        "aromatic_rings": prep_data.get('aromatic_rings', 0),
-                                        "hbond_donors": prep_data.get('h_bond_donors', 0),
-                                        "charged_atoms": prep_data.get('charged_atoms', 0),
+                                        "aromatic_rings": props.get('aromatic_rings', []),
+                                        "hbond_donors": props.get('hbond_donors', []),
+                                        "pos_charges": props.get('pos_charges', []),
                                     }
-                                    logger.info(f"[{ligand_name}] Ligand prepared: {prep_data.get('aromatic_rings', 0)} aromatic rings")
+                                    logger.info(f"[{ligand_name}] Ligand prepared: {props.get('n_aromatic_rings', 0)} aromatic rings")
 
                                     # Step 2: Dock ensemble
                                     # Per Robustelli et al. 2025 (J. Chem. Inf. Model.): α-synuclein binds at
@@ -954,7 +957,7 @@ class EngineerCoordinator(BaseAgent):
                                     )
                                     dock_data = json.loads(dock_result.content[0].text)
                                     if not dock_data.get('success'):
-                                        logger.error(f"[{ligand_name}] Docking failed: {dock_data.get('error')}")
+                                        logger.error(f"[{ligand_name}] Docking failed: {dock_data.get('error')}: {dock_data.get('details', '')}")
                                         return {"status": "error", "ligand": ligand_name, "error": dock_data.get('error', 'docking failed')}
 
                                     # Extract best energy from cluster_results
@@ -1167,12 +1170,9 @@ class EngineerCoordinator(BaseAgent):
                 author=self.name,
                 content=types.Content(
                     role=self.name,
-                    parts=[types.Part(text=f"""Docking workflow complete.
+                    parts=[types.Part(text=f"""Docking complete — {completed_count}/{len(ligands)} ligands analyzed{error_note}
 
-Completed: {completed_count}/{len(ligands)} ligands
-Experiment Matrix: {artifact_id}{error_note}
-
-Results saved to experiment matrix and ready for Evolution agent analysis.""")]
+Ready for evolution analysis.""")]
                 ),
                 actions=EventActions(
                     state_delta={
@@ -1413,6 +1413,18 @@ def generate_3d_docking_visualization(
         for res in aromatic_residues:
             aromatic_js += f"viewer.addStyle({{resi: {res}}}, {{stick: {{color: 'purple', radius: 0.2}}}});\n"
 
+        # Escape backticks for JavaScript template literals
+        protein_pdb_escaped = protein_pdb_str.replace('`', '\\`')
+        ligand_pdb_escaped = ligand_pdb_str.replace('`', '\\`') if ligand_pdb_str else ""
+
+        # Build ligand JS code
+        ligand_js = ""
+        if ligand_added:
+            ligand_js = f'var ligandPDB = `{ligand_pdb_escaped}`; viewer.addModel(ligandPDB, "pdb"); viewer.setStyle({{model: 1}}, {{stick: {{color: "cyan", radius: 0.15}}}});'
+
+        # Build highlight residues JS
+        highlight_js = ';'.join([f"viewer.addStyle({{resi: {r}}}, {{stick: {{color: 'yellow', radius: 0.2}}}})" for r in (highlight_residues or [])])
+
         # Generate HTML with interaction controls
         html_content = f"""
 <!DOCTYPE html>
@@ -1481,15 +1493,15 @@ def generate_3d_docking_visualization(
         var viewer = $3Dmol.createViewer('viewport', {{backgroundColor: '#1a1a2e'}});
 
         // Add protein
-        var proteinPDB = `{protein_pdb_str.replace('`', '\\`')}`;
+        var proteinPDB = `{protein_pdb_escaped}`;
         viewer.addModel(proteinPDB, 'pdb');
         viewer.setStyle({{}}, {{cartoon: {{color: 'spectrum'}}}});
 
         // Add ligand
-        {'var ligandPDB = `' + ligand_pdb_str.replace('`', '\\`') + '`; viewer.addModel(ligandPDB, "pdb"); viewer.setStyle({model: 1}, {stick: {color: "cyan", radius: 0.15}});' if ligand_added else ''}
+        {ligand_js}
 
         // Highlight binding site residues
-        {';'.join([f"viewer.addStyle({{resi: {r}}}, {{stick: {{color: 'yellow', radius: 0.2}}}})" for r in (highlight_residues or [])])}
+        {highlight_js}
 
         // H-bond residues (blue)
         {hbond_js}
@@ -1633,9 +1645,9 @@ def visualize_docking_result(
 
     # Extract ligand properties for inferring potential interactions
     ligand_props = ligand_result.get("ligand_properties", {})
-    has_aromatics = ligand_props.get("aromatic_rings", 0) > 0
-    has_hbond_donors = ligand_props.get("hbond_donors", 0) > 0 or ligand_props.get("h_bond_donors", 0) > 0
-    has_charged = ligand_props.get("charged_atoms", 0) > 0
+    has_aromatics = bool(ligand_props.get("aromatic_rings"))
+    has_hbond_donors = bool(ligand_props.get("hbond_donors"))
+    has_charged = bool(ligand_props.get("pos_charges"))
 
     # Build interaction data from AVAILABLE sources (not broken analyze_interactions)
     # Use best_residue + ligand properties to infer likely interaction types

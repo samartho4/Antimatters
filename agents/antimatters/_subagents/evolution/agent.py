@@ -38,6 +38,8 @@ from datetime import datetime
 from typing import Dict, List, Any, Optional, Tuple, Union
 from dataclasses import dataclass, field, asdict
 from google.adk.agents import LlmAgent
+from google.adk.models.google_llm import Gemini
+from google.genai import types as genai_retry_types
 from google.adk.tools import ToolContext
 from neo4j import GraphDatabase
 
@@ -1128,6 +1130,67 @@ def get_binding_hotspots(
             "energy_threshold": energy_threshold,
             "n_hotspots": len([h for h in hotspots if h["is_hotspot"]]),
             "hotspots": hotspots,
+        }
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def create_interaction_relationship(
+    ligand_id: str,
+    residue_id: str,
+    interaction_type: str,
+    properties_json: str = "{}",
+    experiment_id: str = None,
+    tool_context: ToolContext = None
+) -> dict:
+    """
+    Create INTERACTS_WITH relationship between ligand and residue in Neo4j.
+
+    Use after spatial analysis identifies specific interactions (H-bonds, pi-stacking, etc).
+
+    Args:
+        ligand_id: Entity ID (e.g., "exp_ligand_abc123")
+        residue_id: Entity ID (e.g., "residue_Y129")
+        interaction_type: h_bond | pi_stacking | hydrophobic | ionic | vdw
+        properties_json: JSON with distance, angle, etc. (e.g., '{"distance_angstrom": 2.8}')
+        experiment_id: Optional experiment artifact ID
+
+    Returns:
+        Success status with relationship ID
+    """
+    try:
+        properties = json.loads(properties_json) if properties_json else {}
+        properties["interaction_type"] = interaction_type
+        relationship_id = f"int_{uuid.uuid4().hex[:8]}"
+
+        driver, database = get_neo4j_driver()
+        with driver.session(database=database) as session:
+            result = session.run("""
+                MATCH (ligand {id: $ligand_id})
+                MATCH (residue {id: $residue_id})
+                MERGE (ligand)-[r:RELATIONSHIP {id: $rel_id}]->(residue)
+                SET r.type = 'INTERACTS_WITH',
+                    r.properties = $properties,
+                    r.experiment_id = $experiment_id,
+                    r.created_at = datetime()
+                RETURN r
+            """, {
+                "ligand_id": ligand_id,
+                "residue_id": residue_id,
+                "rel_id": relationship_id,
+                "properties": json.dumps(properties),
+                "experiment_id": experiment_id
+            })
+
+            if not result.single():
+                return {"success": False, "error": "Failed to create relationship - entities not found"}
+
+        driver.close()
+        return {
+            "success": True,
+            "relationship_id": relationship_id,
+            "message": f"Created INTERACTS_WITH: {ligand_id} → {residue_id} ({interaction_type})"
         }
 
     except Exception as e:
@@ -2949,7 +3012,7 @@ async def visualize_ligand_3d(
 
 evolution_agent = LlmAgent(
     name="evolution_agent",
-    model=MODELS.evolution,
+    model=Gemini(model=MODELS.evolution, retry_options=genai_retry_types.HttpRetryOptions(attempts=3, initial_delay=30, exp_base=2, http_status_codes=[429, 503])),
     description="Analyzes results, discovers SAR patterns, builds knowledge graphs, generates 3D molecules with Gemini 3 (on approval), creates publication figures, and persists learnings",
     instruction=build_evolution_instruction(),
     tools=[

@@ -88,8 +88,8 @@ class RetryConfig:
     ])
 
     # Model fallback settings
-    model_rotation_enabled: bool = True  # Enable automatic model fallback
-    model_switch_after_retries: int = 3  # Switch to fallback after 3 consecutive 503s
+    model_rotation_enabled: bool = True   # Enable automatic model fallback
+    model_switch_after_retries: int = 1   # Switch immediately on first 429/503 — don't waste attempts
 
 
 RETRY = RetryConfig()
@@ -117,65 +117,53 @@ class GeminiModel(Enum):
 
 @dataclass
 class ModelConfig:
-    """Model selection based on task complexity.
+    """Model selection — each agent on a different RPM bucket.
 
-    Using Gemini 3 (Flash/Pro):
-    - Latest models with best performance
-    - Flash for simple tasks, Pro for complex reasoning
-    - Supports molecule generation capabilities
-
-    Note: Each model has separate quota buckets. Using different models
-    helps avoid rate limiting during intensive workflows.
+    Paid Tier 1: Pro ~150 RPM, Flash ~450 RPM.  Each model name is its
+    own bucket, so spreading agents across models = more headroom.
     """
-    research: str = GeminiModel.PRO_3.value  # Gemini 3 Pro for complex research
-    engineering: str = GeminiModel.PRO_2_5.value  # Gemini 2.5 Pro for docking (2.0-pro not available)
-    evolution: str = GeminiModel.PRO_3.value  # Gemini 3 Pro for SAR discovery
-    coordinator: str = GeminiModel.PRO_2_5.value  # Gemini 2.5 Pro for routing
+    coordinator: str = GeminiModel.FLASH_2_5.value   # 2.5 flash — routing only
+    research:    str = GeminiModel.FLASH_3.value     # 3 flash   — literature validation
+    engineering: str = GeminiModel.FLASH_2_5.value   # 2.5 flash — (MCP-only, no LLM calls)
+    evolution:   str = GeminiModel.PRO_3.value       # 3 pro     — SAR + molecule gen
 
 
 MODELS = ModelConfig()
 
 
 # =============================================================================
-# Model Fallback Chains (for 503 UNAVAILABLE handling)
+# Model Fallback Chains (for 429 / 503 model switching)
 # =============================================================================
 
 @dataclass
 class FallbackChain:
-    """Ordered list of fallback models when primary is overloaded.
+    """Ordered fallback per agent.  Index 0 MUST match ModelConfig.
 
-    When a model returns 503 UNAVAILABLE, the system will try the next
-    model in the chain. gemini-2.0-flash is the most stable fallback.
+    On 429 or 503 the switcher walks down the chain into different
+    RPM buckets so switching actually helps.
     """
-    # Research agent fallbacks (need reasoning capability)
+    coordinator: List[str] = field(default_factory=lambda: [
+        GeminiModel.FLASH_2_5.value,     # Primary
+        GeminiModel.FLASH_2_0.value,     # Fallback 1
+        GeminiModel.FLASH_3.value,       # Fallback 2
+    ])
+
     research: List[str] = field(default_factory=lambda: [
-        GeminiModel.PRO_2_5.value,      # Primary
-        GeminiModel.PRO_3.value,         # Fallback 1: 3.x Pro
-        GeminiModel.FLASH_2_5.value,     # Fallback 2: Faster 2.5
-        GeminiModel.FLASH_2_0.value,     # Fallback 3: Most stable
+        GeminiModel.FLASH_3.value,       # Primary
+        GeminiModel.FLASH_2_5.value,     # Fallback 1
+        GeminiModel.FLASH_2_0.value,     # Fallback 2
     ])
 
-    # Engineering agent fallbacks (need orchestration)
     engineering: List[str] = field(default_factory=lambda: [
-        GeminiModel.PRO_3.value,         # Primary
-        GeminiModel.PRO_2_5.value,       # Fallback 1: 2.5 Pro
-        GeminiModel.FLASH_2_5.value,     # Fallback 2: Faster
-        GeminiModel.FLASH_2_0.value,     # Fallback 3: Most stable
+        GeminiModel.FLASH_2_5.value,     # Primary
+        GeminiModel.FLASH_2_0.value,     # Fallback
     ])
 
-    # Evolution agent fallbacks (need generation capability)
     evolution: List[str] = field(default_factory=lambda: [
         GeminiModel.PRO_3.value,         # Primary
-        GeminiModel.PRO_2_5.value,       # Fallback 1: 2.5 Pro
-        GeminiModel.FLASH_2_5.value,     # Fallback 2: Faster
-        GeminiModel.FLASH_2_0.value,     # Fallback 3: Most stable
-    ])
-
-    # Coordinator fallbacks (fast routing)
-    coordinator: List[str] = field(default_factory=lambda: [
-        GeminiModel.FLASH_3.value,       # Primary
-        GeminiModel.FLASH_2_5.value,     # Fallback 1: 2.5 Flash
-        GeminiModel.FLASH_2_0.value,     # Fallback 2: Most stable (always works)
+        GeminiModel.PRO_2_5.value,       # Fallback 1: other pro bucket
+        GeminiModel.FLASH_2_5.value,     # Fallback 2: flash if all pro exhausted
+        GeminiModel.FLASH_2_0.value,     # Fallback 3
     ])
 
 
@@ -210,7 +198,7 @@ PROTEINS: Dict[str, ProteinConfig] = {
         description="Intrinsically disordered protein implicated in Parkinson's disease",
         uniprot_id="P37840",
         default_n_clusters=20,
-        default_exhaustiveness=8,
+        default_exhaustiveness=32,
     ),
     "tau": ProteinConfig(
         name="Tau Protein",
@@ -247,22 +235,22 @@ class LigandConfig:
 LIGANDS: Dict[str, LigandConfig] = {
     "fasudil": LigandConfig(
         name="Fasudil",
-        smiles="CC(=O)Nc1ccc2c(c1)C(=O)N(C2)C3CCCNC3",
+        smiles="O=S(=O)(c1cccc2cnccc12)N1CCCNCC1",
         source="ChEMBL",
-        chembl_id="CHEMBL727",
-        description="Rho kinase inhibitor, potential neuroprotective",
+        chembl_id="CHEMBL38380",
+        description="Rho kinase inhibitor; isoquinoline-sulfonyl-homopiperazine",
     ),
     "ligand_47": LigandConfig(
         name="Ligand-47",
-        smiles="Cc1ccc(cc1)C(=O)Nc2ccc(cc2)c3ccccc3",
+        smiles="CC(=O)N1CCc2cc(S(=O)(=O)N3CCCNCC3)ccc21",
         source="Literature",
-        description="From Dhar et al. 2025 screening",
+        description="N-acetyl-dihydroisoquinoline-sulfonyl-homopiperazine; highest α-syn affinity (Robustelli 2022)",
     ),
     "ligand_23": LigandConfig(
         name="Ligand-23",
-        smiles="COc1ccc(cc1)C(=O)Nc2ccc(cc2)O",
+        smiles="O=S(=O)(c1cccc2cnccc12)N1CCC(O)CC1",
         source="Literature",
-        description="From Dhar et al. 2025 screening",
+        description="Isoquinoline-sulfonyl-4-hydroxypiperidine; lacks basic amine (Robustelli 2022)",
     ),
 }
 
@@ -371,7 +359,7 @@ class ExperimentConfig:
     protein_key: str  # Key in PROTEINS dict
     ligand_keys: List[str]  # Keys in LIGANDS dict
     n_clusters: int = 20
-    exhaustiveness: int = 8
+    exhaustiveness: int = 32
     parallel: bool = True  # Run ligands in parallel
 
     def get_protein(self) -> ProteinConfig:
@@ -387,7 +375,7 @@ DEFAULT_EXPERIMENT = ExperimentConfig(
     protein_key="alpha_synuclein",
     ligand_keys=["fasudil", "ligand_47", "ligand_23"],
     n_clusters=20,
-    exhaustiveness=8,
+    exhaustiveness=32,
     parallel=True,
 )
 
@@ -405,10 +393,16 @@ def get_protein_by_ped_id(ped_id: str) -> Optional[ProteinConfig]:
 
 
 def get_ligand_by_name(name: str) -> Optional[LigandConfig]:
-    """Find ligand config by name (case-insensitive)."""
-    name_lower = name.lower()
+    """Find ligand config by name (case-insensitive, normalizes spaces/hyphens/underscores)."""
+    import re
+    # Normalize: lowercase + replace spaces/hyphens/underscores with a single character
+    name_normalized = re.sub(r'[\s\-_]+', '', name.lower())
+
     for key, config in LIGANDS.items():
-        if config.name.lower() == name_lower or key == name_lower:
+        config_name_normalized = re.sub(r'[\s\-_]+', '', config.name.lower())
+        key_normalized = re.sub(r'[\s\-_]+', '', key.lower())
+
+        if config_name_normalized == name_normalized or key_normalized == name_normalized:
             return config
     return None
 
