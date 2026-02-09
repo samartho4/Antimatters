@@ -758,90 +758,179 @@ async def dock_ensemble(
 async def analyze_interactions(
     protein_pdb: Annotated[str, Field(description="Protein PDB file path")],
     ligand_pdbqt: Annotated[str, Field(description="Ligand PDBQT file path")],
+    ligand_smiles: Annotated[Optional[str], Field(description="Ligand SMILES for aromatic/charge analysis")] = None,
     frame_indices: Annotated[Optional[List[int]], Field(description="Specific frames to analyze")] = None,
     session_id: Annotated[str, Field(description="Session identifier")] = "default"
 ) -> dict:
-    """Analyze protein-ligand interactions (H-bonds, hydrophobic, aromatic contacts)."""
+    """Analyze protein-ligand interactions: H-bonds, hydrophobic, aromatic stacking, charge contacts.
+
+    Phase 2 fix: Properly combines protein + ligand trajectories and extracts ligand chemical
+    features (aromatic rings, H-bond donors, charged atoms) for complete spatial analysis.
+    Returns interaction_types for INTERACTS_WITH relationships in Neo4j.
+    """
     try:
-        # Lazy load dependencies
         md = _load_mdtraj()
         ANALYSIS_AVAILABLE = _load_analysis()
-        
+
         if not ANALYSIS_AVAILABLE:
-            return {
-                "success": False,
-                "error": "AnalysisNotAvailable",
-                "details": "trajectory_analysis.py module not found"
-            }
-        
-        # Import analysis functions
+            return {"success": False, "error": "AnalysisNotAvailable", "details": "trajectory_analysis.py not found"}
+
         from trajectory_analysis import hbond, hphob_contacts, aro_contacts, charge_contacts, dual_contact
-        
+
         if session_id not in _sessions:
             raise ValueError(f"Session {session_id} not found")
-        
-        session = _sessions[session_id]
-        
-        # Validate files
+
         protein_path = validate_file_path(protein_pdb)
-        ligand_path = validate_file_path(ligand_pdbqt)
-        
-        # Load protein trajectory
-        traj = md.load(str(protein_path))
-        
-        # Select frames to analyze
+        ligand_pdbqt_path = validate_file_path(ligand_pdbqt)
+
+        # Convert ligand PDBQT to PDB
+        ligand_pdb_path = str(ligand_pdbqt_path).replace('.pdbqt', '_analysis.pdb')
+        result = subprocess.run(
+            ['/opt/homebrew/bin/obabel', '-ipdbqt', str(ligand_pdbqt_path), '-opdb', '-O', ligand_pdb_path],
+            capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            return {"success": False, "error": "ConversionFailed", "details": result.stderr}
+
+        # Load trajectories
+        protein_traj = md.load(str(protein_path))
+        ligand_traj = md.load(ligand_pdb_path)
+        atom_offset = protein_traj.n_atoms
+
+        # Extract ligand features from SMILES for aromatic/charge analysis
+        aromatic_rings, hbond_donors, pos_charges, neg_charges = [], [], [], []
+        if ligand_smiles:
+            Chem, AllChem, _ = _load_rdkit()
+            mol = Chem.MolFromSmiles(ligand_smiles)
+            if mol:
+                mol = Chem.AddHs(mol)
+                AllChem.EmbedMolecule(mol, randomSeed=42)
+
+                # Aromatic rings (offset for combined trajectory)
+                ring_info = mol.GetRingInfo()
+                for ring in ring_info.AtomRings():
+                    if all(mol.GetAtomWithIdx(i).GetIsAromatic() for i in ring):
+                        aromatic_rings.append([i + atom_offset for i in ring])
+
+                # H-bond donors (N-H, O-H)
+                for atom in mol.GetAtoms():
+                    if atom.GetAtomicNum() in [7, 8]:
+                        for neighbor in atom.GetNeighbors():
+                            if neighbor.GetAtomicNum() == 1:
+                                hbond_donors.append(atom.GetIdx() + atom_offset)
+                                break
+
+                # Charged atoms
+                pos_charges = [atom.GetIdx() + atom_offset for atom in mol.GetAtoms() if atom.GetFormalCharge() > 0]
+                neg_charges = [atom.GetIdx() + atom_offset for atom in mol.GetAtoms() if atom.GetFormalCharge() < 0]
+
+                logger.info(f"Ligand: {len(aromatic_rings)} rings, {len(hbond_donors)} H-donors")
+
+        # Analyze frames
         if frame_indices is None:
-            frame_indices = list(range(min(10, traj.n_frames)))  # Analyze first 10 frames by default
-        
-        # Analyze each frame
+            frame_indices = list(range(min(5, protein_traj.n_frames)))
+
         all_interactions = []
-        
+        interaction_types = set()
+
         for frame_idx in frame_indices:
-            if frame_idx >= traj.n_frames:
+            if frame_idx >= protein_traj.n_frames:
                 continue
-            
-            frame = traj[frame_idx]
-            
-            # Compute interactions
+
+            # Combine protein frame + ligand
+            protein_frame = protein_traj[frame_idx]
             try:
-                hbonds = hbond(frame, ligand_path)
-                hydrophobic = hphob_contacts(frame, ligand_path)
-                aromatic = aro_contacts(frame, ligand_path)
-                charged = charge_contacts(frame, ligand_path)
-                dual = dual_contact(frame, ligand_path)
-                
+                combined = protein_frame.stack(ligand_traj[0])
+            except Exception as e:
+                logger.warning(f"Frame {frame_idx}: stack failed: {e}")
+                continue
+
+            ligand_residue_idx = protein_frame.n_residues
+
+            try:
+                import numpy as np
+
+                def has_any_data(result):
+                    """Check if result has any non-empty data (handles numpy arrays)."""
+                    if result is None:
+                        return False
+                    if isinstance(result, dict):
+                        for v in result.values():
+                            if v is not None:
+                                if hasattr(v, '__len__') and len(v) > 0:
+                                    return True
+                                elif isinstance(v, (np.ndarray,)) and v.size > 0:
+                                    return True
+                    elif hasattr(result, '__len__') and len(result) > 0:
+                        return True
+                    elif isinstance(result, (np.ndarray,)) and result.size > 0:
+                        return True
+                    return False
+
+                # H-bonds
+                hbonds_result = hbond(combined, ligand_residue_idx, lig_hbond_donors=hbond_donors)
+                if has_any_data(hbonds_result):
+                    interaction_types.add("h_bond")
+
+                # Hydrophobic
+                hphob_result = hphob_contacts(combined, ligand_residue_idx)
+                if has_any_data(hphob_result):
+                    interaction_types.add("hydrophobic")
+
+                # Aromatic stacking
+                aro_result = aro_contacts(combined, ligand_rings=aromatic_rings) if aromatic_rings else None
+                if has_any_data(aro_result):
+                    interaction_types.add("aromatic")
+
+                # Charge contacts
+                charge_result = charge_contacts(combined, Ligand_Pos_Charges=pos_charges, Ligand_Neg_Charges=neg_charges)
+                if has_any_data(charge_result):
+                    interaction_types.add("charged")  # Matches update_ligand_status convention
+
+                # Dual contact pattern
+                dual_result = dual_contact(combined, ligand_residue_idx)
+
+                # Serialize results
+                def safe_serialize(obj):
+                    if obj is None: return None
+                    if hasattr(obj, 'tolist'): return obj.tolist()
+                    if isinstance(obj, dict): return {k: safe_serialize(v) for k, v in obj.items()}
+                    if isinstance(obj, (list, tuple)): return [safe_serialize(i) for i in obj]
+                    return obj
+
                 all_interactions.append({
                     "frame": frame_idx,
-                    "hbonds": hbonds,
-                    "hydrophobic": hydrophobic,
-                    "aromatic": aromatic,
-                    "charged": charged,
-                    "dual": dual
+                    "hbonds": safe_serialize(hbonds_result),
+                    "hydrophobic": safe_serialize(hphob_result),
+                    "aromatic": safe_serialize(aro_result),
+                    "charged": safe_serialize(charge_result),
+                    "dual": dual_result.tolist() if hasattr(dual_result, 'tolist') else str(dual_result)[:100]
                 })
+
             except Exception as e:
-                logger.warning(f"Analysis failed for frame {frame_idx}: {e}")
+                logger.warning(f"Analysis frame {frame_idx}: {e}")
                 continue
-        
-        # Summarize interactions across frames
-        summary = {
-            "n_frames_analyzed": len(all_interactions),
-            "avg_hbonds": sum(len(i["hbonds"]) for i in all_interactions) / len(all_interactions) if all_interactions else 0,
-            "avg_hydrophobic": sum(len(i["hydrophobic"]) for i in all_interactions) / len(all_interactions) if all_interactions else 0,
-            "avg_aromatic": sum(len(i["aromatic"]) for i in all_interactions) / len(all_interactions) if all_interactions else 0,
-        }
-        
+
+        # Cleanup
+        if os.path.exists(ligand_pdb_path):
+            os.unlink(ligand_pdb_path)
+
         return {
             "success": True,
+            "n_frames_analyzed": len(all_interactions),
+            "interaction_types": list(interaction_types),
             "interactions": all_interactions,
-            "summary": summary
+            "summary": {
+                "ligand_residue_idx": protein_traj.n_residues,
+                "aromatic_rings": len(aromatic_rings),
+                "hbond_donors": len(hbond_donors),
+                "charged_atoms": len(pos_charges) + len(neg_charges)
+            }
         }
-        
+
     except Exception as e:
-        return {
-            "success": False,
-            "error": type(e).__name__,
-            "details": str(e)
-        }
+        logger.error(f"analyze_interactions: {e}")
+        return {"success": False, "error": type(e).__name__, "details": str(e)}
 
 ## Module-level flag: set at startup, read by dock_ensemble
 ADFR_AVAILABLE = False
