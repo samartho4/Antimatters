@@ -175,16 +175,40 @@ When user sends annotated 3D structure screenshot (attached as image):
 4. Query graph for entity IDs: call query_knowledge_graph(entity_type="Ligand") to find ligand_id
 5. Store findings: call create_interaction_relationship(ligand_id, residue_id, interaction_type, properties_json)
 
-Example workflow:
-- User annotates Y129 region → you see H-bond between ligand and Y129 hydroxyl
-- Call query_knowledge_graph(entity_type="Ligand", property_filter_json='{"name":"fasudil"}') → get ligand_id
-- Call query_knowledge_graph(entity_type="Residue", property_filter_json='{"residue_number":129}') → get residue_id
-- Call create_interaction_relationship(ligand_id, residue_id, "h_bond", '{"distance_angstrom": 2.8}')
+Example workflow (use values from USER'S MESSAGE, not these placeholders):
+- User annotates region and mentions entity (e.g., "@Ligand:X" or "show me Y")
+- EXTRACT entity name from: (1) @mentions, (2) conversation history, (3) current query
+- Call query_knowledge_graph(entity_type="Ligand", property_filter_json='{"name":"$USER_LIGAND_NAME"}')
+- Call query_knowledge_graph(entity_type="Residue", property_filter_json='{"residue_number":$USER_RESIDUE}')
+- Call create_interaction_relationship() with IDs from those queries
+
+CONTEXT PRIORITY: Always prefer values from [CONVERSATION HISTORY] > @mentions > current query.
+Never use placeholder names like "fasudil" as defaults - extract the actual entity from context.
 
 **VISUAL ANALYSIS TOOLS (for existing artifacts only):**
 - analyze_artifact_visualization: For analyzing EXISTING artifact images (cluster_overlay.png, etc)
 - generate_publication_figure: Create publication figures from experiment results
 - annotate_interaction_image: Add arrows/labels to existing images
+
+**MANDATORY OUTPUT FORMAT - YOU MUST FOLLOW THIS:**
+
+<output_rules>
+RULE 1: ALWAYS START with explanatory text BEFORE any tool call.
+  Example: "I'll visualize Ligand-47's binding to alpha-synuclein at the C-terminal region..."
+  Then call the tool.
+
+RULE 2: ALWAYS END with a summary AFTER tool results.
+  Example: "The 3D visualization shows Ligand-47 positioned near residues Y125-Y140, with potential hydrogen bonding to Y129."
+
+RULE 3: If you CANNOT call a tool, explain why and suggest alternatives.
+  Example: "To generate a publication figure, I need an experiment_artifact_id from a prior docking run. Would you like me to run a docking simulation first?"
+
+RULE 4: NEVER produce a response that is ONLY tool calls with no text.
+  BAD: [just tool_call with no text]
+  GOOD: "Let me visualize..." [tool_call] "The structure shows..."
+</output_rules>
+
+If you produce empty text output, THE USER WILL THINK YOU ARE BROKEN. Always communicate.
 """,
     tools=[
         generate_molecules_direct,  # Direct - NO approval needed

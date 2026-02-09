@@ -34,10 +34,14 @@ import json
 import uuid
 import math
 import os
+import logging
 from datetime import datetime
 from typing import Dict, List, Any, Optional, Tuple, Union
 from dataclasses import dataclass, field, asdict
 from google.adk.agents import LlmAgent
+
+# Configure logger for verification logging
+logger = logging.getLogger(__name__)
 from google.adk.models.google_llm import Gemini
 from google.genai import types as genai_retry_types
 from google.adk.tools import ToolContext
@@ -562,7 +566,14 @@ def build_scientific_graph(
         ))
 
     # Process ligand results
-    for result in content.get("ligand_results", []):
+    # ===== VERIFICATION LOGGING: Processing ligand_results =====
+    ligand_results = content.get("ligand_results", [])
+    logger.info(f"[build_scientific_graph] ===== VERIFY: Processing {len(ligand_results)} ligand results =====")
+    for i, lr in enumerate(ligand_results):
+        logger.info(f"[build_scientific_graph] [VERIFY] ligand_results[{i}]: name={lr.get('ligand_name')}, status={lr.get('status')}, interaction_types={lr.get('interaction_types', [])}")
+    logger.info(f"[build_scientific_graph] ===== END ligand_results preview =====")
+
+    for result in ligand_results:
         ligand_name = result.get("ligand_name", "Unknown")
 
         # Level 1: Experimental Ligand
@@ -615,6 +626,14 @@ def build_scientific_graph(
 
         # Residue interaction
         residue = result.get("best_residue")
+        interaction_types = result.get("interaction_types", [])
+
+        # ===== VERIFICATION LOGGING: INTERACTS_WITH creation =====
+        logger.info(f"[build_scientific_graph] [{ligand_name}] ===== VERIFY: INTERACTS_WITH CREATION =====")
+        logger.info(f"[build_scientific_graph] [{ligand_name}] [VERIFY] best_residue: {residue}")
+        logger.info(f"[build_scientific_graph] [{ligand_name}] [VERIFY] interaction_types from result: {interaction_types}")
+        logger.info(f"[build_scientific_graph] [{ligand_name}] [VERIFY] interaction_types count: {len(interaction_types)}")
+
         if residue:
             residue_entity = ScientificEntity(
                 entity_id=f"residue_Y{residue}",
@@ -625,14 +644,25 @@ def build_scientific_graph(
             )
             entities.append(residue_entity)
 
-            for itype in result.get("interaction_types", []):
-                relationships.append(ScientificRelationship(
-                    relationship_id=f"int_{uuid.uuid4().hex[:8]}",
-                    subject_id=exp_ligand.entity_id,
-                    predicate="INTERACTS_WITH",
-                    object_id=residue_entity.entity_id,
-                    properties={"interaction_type": itype}
-                ))
+            if interaction_types:
+                for itype in interaction_types:
+                    rel_id = f"int_{uuid.uuid4().hex[:8]}"
+                    # CRITICAL: This creates the INTERACTS_WITH relationship that get_binding_hotspots queries
+                    print(f"[build_scientific_graph] [{ligand_name}] [VERIFY] ★★★ CREATING INTERACTS_WITH: {exp_ligand.entity_id} --[{itype}]--> {residue_entity.entity_id} ★★★", flush=True)
+                    logger.info(f"[build_scientific_graph] [{ligand_name}] [VERIFY] ✓ CREATING INTERACTS_WITH: {exp_ligand.entity_id} --[{itype}]--> {residue_entity.entity_id}")
+                    relationships.append(ScientificRelationship(
+                        relationship_id=rel_id,
+                        subject_id=exp_ligand.entity_id,
+                        predicate="INTERACTS_WITH",
+                        object_id=residue_entity.entity_id,
+                        properties={"interaction_type": itype}
+                    ))
+            else:
+                print(f"[build_scientific_graph] [{ligand_name}] [VERIFY] ⚠ WARNING: No interaction_types! No INTERACTS_WITH will be created!", flush=True)
+                logger.warning(f"[build_scientific_graph] [{ligand_name}] [VERIFY] ⚠ WARNING: No interaction_types! No INTERACTS_WITH will be created!")
+        else:
+            logger.warning(f"[build_scientific_graph] [{ligand_name}] [VERIFY] ⚠ WARNING: No best_residue! Cannot create Residue entity or INTERACTS_WITH!")
+        logger.info(f"[build_scientific_graph] [{ligand_name}] ===== END INTERACTS_WITH CREATION =====")
 
     return entities, relationships
 
@@ -832,9 +862,39 @@ def build_knowledge_graph(
     """
     artifact = read_artifact(experiment_artifact_id)
     if not artifact:
+        logger.error(f"[build_knowledge_graph] [VERIFY] Experiment artifact NOT FOUND: {experiment_artifact_id}")
         return {"success": False, "error": "Experiment not found"}
 
+    # ===== VERIFICATION LOGGING: build_knowledge_graph START =====
+    logger.info(f"[build_knowledge_graph] ===== VERIFY: build_knowledge_graph CALLED =====")
+    logger.info(f"[build_knowledge_graph] [VERIFY] experiment_artifact_id: {experiment_artifact_id}")
+    logger.info(f"[build_knowledge_graph] [VERIFY] protein_name: {protein_name}")
+    logger.info(f"[build_knowledge_graph] [VERIFY] artifact keys: {list(artifact.keys())}")
+    content = artifact.get("content", {})
+    logger.info(f"[build_knowledge_graph] [VERIFY] content keys: {list(content.keys())}")
+    logger.info(f"[build_knowledge_graph] [VERIFY] ligand_results count: {len(content.get('ligand_results', []))}")
+    logger.info(f"[build_knowledge_graph] ===== END build_knowledge_graph START =====")
+
     entities, relationships = build_scientific_graph(artifact, protein_name)
+
+    # ===== VERIFICATION LOGGING: build_scientific_graph RESULT =====
+    logger.info(f"[build_knowledge_graph] ===== VERIFY: build_scientific_graph RESULT =====")
+    logger.info(f"[build_knowledge_graph] [VERIFY] Total entities: {len(entities)}")
+    logger.info(f"[build_knowledge_graph] [VERIFY] Total relationships: {len(relationships)}")
+
+    # Count relationship types
+    rel_counts = {}
+    for rel in relationships:
+        predicate = rel.predicate
+        rel_counts[predicate] = rel_counts.get(predicate, 0) + 1
+    logger.info(f"[build_knowledge_graph] [VERIFY] Relationship breakdown: {rel_counts}")
+
+    interacts_with_count = rel_counts.get("INTERACTS_WITH", 0)
+    if interacts_with_count > 0:
+        logger.info(f"[build_knowledge_graph] [VERIFY] ✓ GOOD: {interacts_with_count} INTERACTS_WITH relationships will be persisted to Neo4j")
+    else:
+        logger.warning(f"[build_knowledge_graph] [VERIFY] ⚠ WARNING: NO INTERACTS_WITH relationships! KG will have no spatial interaction data!")
+    logger.info(f"[build_knowledge_graph] ===== END build_scientific_graph RESULT =====")
 
     # Create graph artifact
     graph_content = {
@@ -861,10 +921,17 @@ def build_knowledge_graph(
 
     # Persist to Neo4j for real graph queries
     neo4j_status = {"success": False, "message": "Neo4j not attempted"}
+
+    # ===== VERIFICATION LOGGING: Neo4j PERSISTENCE =====
+    logger.info(f"[build_knowledge_graph] ===== VERIFY: Neo4j PERSISTENCE =====")
+
     try:
         driver, database = get_neo4j_driver()
+        logger.info(f"[build_knowledge_graph] [VERIFY] Connected to Neo4j database: {database}")
+
         with driver.session(database=database) as session:
             # Create nodes for each entity
+            logger.info(f"[build_knowledge_graph] [VERIFY] Creating {len(entities)} entity nodes...")
             for entity in entities:
                 session.run("""
                     MERGE (n {id: $id})
@@ -887,7 +954,13 @@ def build_knowledge_graph(
                 })
 
             # Create relationships
+            logger.info(f"[build_knowledge_graph] [VERIFY] Creating {len(relationships)} relationships...")
+            interacts_count = 0
             for rel in relationships:
+                if rel.predicate == "INTERACTS_WITH":
+                    interacts_count += 1
+                    logger.info(f"[build_knowledge_graph] [VERIFY] ✓ PERSISTING INTERACTS_WITH: {rel.subject_id} --[{rel.properties.get('interaction_type')}]--> {rel.object_id}")
+
                 session.run("""
                     MATCH (a {id: $subject_id})
                     MATCH (b {id: $object_id})
@@ -905,10 +978,17 @@ def build_knowledge_graph(
                     "experiment_id": experiment_artifact_id
                 })
 
+            logger.info(f"[build_knowledge_graph] [VERIFY] Neo4j persist complete: {len(entities)} nodes, {len(relationships)} relationships ({interacts_count} INTERACTS_WITH)")
+
         driver.close()
         neo4j_status = {"success": True, "message": f"Persisted {len(entities)} nodes and {len(relationships)} edges to Neo4j"}
+        logger.info(f"[build_knowledge_graph] [VERIFY] ✓ Neo4j SUCCESS: {neo4j_status['message']}")
     except Exception as e:
         neo4j_status = {"success": False, "message": f"Neo4j error: {str(e)}"}
+        logger.error(f"[build_knowledge_graph] [VERIFY] ⚠ Neo4j FAILED: {str(e)}")
+        import traceback
+        logger.error(f"[build_knowledge_graph] [VERIFY] Neo4j traceback: {traceback.format_exc()}")
+    logger.info(f"[build_knowledge_graph] ===== END Neo4j PERSISTENCE =====")
 
     # Store in state
     if tool_context:
@@ -952,6 +1032,12 @@ def query_knowledge_graph(
     Returns:
         List of matching entities with their properties.
     """
+    # ===== VERIFICATION LOGGING: query_knowledge_graph CALLED =====
+    logger.info(f"[query_knowledge_graph] ===== VERIFY: PLANNING AGENT KG QUERY =====")
+    logger.info(f"[query_knowledge_graph] [VERIFY] entity_type: {entity_type}")
+    logger.info(f"[query_knowledge_graph] [VERIFY] property_filter_json: {property_filter_json}")
+    logger.info(f"[query_knowledge_graph] [VERIFY] limit: {limit}")
+
     try:
         # Parse property filter from JSON string
         property_filter = None
@@ -999,15 +1085,56 @@ def query_knowledge_graph(
                     "external_ids": json.loads(record["external_ids"]) if record["external_ids"] else {},
                 })
 
+        # Also fetch relationships between these entities
+        entity_ids = [e["id"] for e in entities]
+        relationships = []
+
+        if entity_ids:
+            with driver.session(database=database) as session:
+                rel_result = session.run("""
+                    MATCH (a:Entity)-[r]->(b:Entity)
+                    WHERE a.id IN $entity_ids AND b.id IN $entity_ids
+                    RETURN a.id AS subject_id, type(r) AS predicate, b.id AS object_id,
+                           properties(r) AS properties, id(r) AS rel_id
+                    LIMIT 500
+                """, {"entity_ids": entity_ids})
+
+                for record in rel_result:
+                    relationships.append({
+                        "relationship_id": f"rel_{record['rel_id']}",
+                        "subject_id": record["subject_id"],
+                        "predicate": record["predicate"],
+                        "object_id": record["object_id"],
+                        "properties": record["properties"] or {},
+                    })
+
         driver.close()
+
+        # ===== VERIFICATION LOGGING: query_knowledge_graph RESULT =====
+        logger.info(f"[query_knowledge_graph] [VERIFY] SUCCESS: Found {len(entities)} entities, {len(relationships)} relationships")
+        if entities:
+            for i, ent in enumerate(entities[:5]):  # First 5
+                logger.info(f"[query_knowledge_graph] [VERIFY] entity[{i}]: type={ent.get('type')}, name={ent.get('name')}, id={ent.get('id')}")
+        else:
+            logger.warning(f"[query_knowledge_graph] [VERIFY] ⚠ NO ENTITIES FOUND! KG may be empty or query filters too strict.")
+
+        # Check for INTERACTS_WITH relationships
+        interacts_count = sum(1 for r in relationships if r.get('predicate') == 'INTERACTS_WITH')
+        logger.info(f"[query_knowledge_graph] [VERIFY] INTERACTS_WITH relationships in result: {interacts_count}")
+        if interacts_count == 0:
+            logger.warning(f"[query_knowledge_graph] [VERIFY] ⚠ NO INTERACTS_WITH found! Planning agent has no spatial data to report.")
+        logger.info(f"[query_knowledge_graph] ===== END PLANNING AGENT KG QUERY =====")
+
         return {
             "success": True,
             "n_results": len(entities),
             "entities": entities,
+            "relationships": relationships,
         }
 
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        logger.error(f"[query_knowledge_graph] [VERIFY] ERROR: {str(e)}")
+        return {"success": False, "error": str(e), "relationships": []}
 
 
 def find_related_entities(
@@ -1084,6 +1211,12 @@ def get_binding_hotspots(
 
     Uses INTERACTS_WITH relationships and DOCKS_TO energies.
     """
+    # ===== VERIFICATION LOGGING: get_binding_hotspots CALLED =====
+    logger.info(f"[get_binding_hotspots] ===== VERIFY: PLANNING AGENT HOTSPOTS QUERY =====")
+    logger.info(f"[get_binding_hotspots] [VERIFY] protein_name: {protein_name}")
+    logger.info(f"[get_binding_hotspots] [VERIFY] energy_threshold: {energy_threshold}")
+    logger.info(f"[get_binding_hotspots] [VERIFY] This query requires INTERACTS_WITH relationships in Neo4j!")
+
     try:
         driver, database = get_neo4j_driver()
         with driver.session(database=database) as session:
@@ -1124,15 +1257,34 @@ def get_binding_hotspots(
                 })
 
         driver.close()
+
+        # ===== VERIFICATION LOGGING: get_binding_hotspots RESULT =====
+        n_hotspots = len([h for h in hotspots if h["is_hotspot"]])
+        # Use print() for guaranteed visibility
+        print(f"[get_binding_hotspots] [VERIFY] ★★★ Found {len(hotspots)} residues, {n_hotspots} are hotspots ★★★", flush=True)
+        logger.info(f"[get_binding_hotspots] [VERIFY] Found {len(hotspots)} residues, {n_hotspots} are hotspots (energy <= {energy_threshold})")
+
+        if hotspots:
+            for i, hs in enumerate(hotspots[:5]):  # First 5
+                print(f"[get_binding_hotspots] [VERIFY] hotspot[{i}]: residue={hs.get('residue')}, n_ligands={hs.get('n_ligands')}, best_energy={hs.get('best_energy')}", flush=True)
+                logger.info(f"[get_binding_hotspots] [VERIFY] hotspot[{i}]: residue={hs.get('residue')}, n_ligands={hs.get('n_ligands')}, best_energy={hs.get('best_energy')}, is_hotspot={hs.get('is_hotspot')}")
+        else:
+            print(f"[get_binding_hotspots] [VERIFY] ⚠ NO HOTSPOTS FOUND! No INTERACTS_WITH in Neo4j for {protein_name}", flush=True)
+            logger.warning(f"[get_binding_hotspots] [VERIFY] ⚠ NO HOTSPOTS FOUND!")
+            logger.warning(f"[get_binding_hotspots] [VERIFY] This means NO INTERACTS_WITH relationships exist in Neo4j for {protein_name}.")
+            logger.warning(f"[get_binding_hotspots] [VERIFY] Root cause: analyze_interactions returned empty interaction_types, OR build_knowledge_graph was never called.")
+        logger.info(f"[get_binding_hotspots] ===== END PLANNING AGENT HOTSPOTS QUERY =====")
+
         return {
             "success": True,
             "protein": protein_name,
             "energy_threshold": energy_threshold,
-            "n_hotspots": len([h for h in hotspots if h["is_hotspot"]]),
+            "n_hotspots": n_hotspots,
             "hotspots": hotspots,
         }
 
     except Exception as e:
+        logger.error(f"[get_binding_hotspots] [VERIFY] ERROR: {str(e)}")
         return {"success": False, "error": str(e)}
 
 
@@ -1150,8 +1302,8 @@ def create_interaction_relationship(
     Use after spatial analysis identifies specific interactions (H-bonds, pi-stacking, etc).
 
     Args:
-        ligand_id: Entity ID (e.g., "exp_ligand_abc123")
-        residue_id: Entity ID (e.g., "residue_Y129")
+        ligand_id: Entity ID or name (e.g., "exp_ligand_abc123" or "Ligand-47")
+        residue_id: Entity ID or name (e.g., "residue_Y129" or "Y125")
         interaction_type: h_bond | pi_stacking | hydrophobic | ionic | vdw
         properties_json: JSON with distance, angle, etc. (e.g., '{"distance_angstrom": 2.8}')
         experiment_id: Optional experiment artifact ID
@@ -1166,15 +1318,29 @@ def create_interaction_relationship(
 
         driver, database = get_neo4j_driver()
         with driver.session(database=database) as session:
+            # FIX: Match by EITHER id OR name (case-insensitive for names)
+            # This allows Gemini to pass "Ligand-47" or "Y125" instead of exact IDs
             result = session.run("""
-                MATCH (ligand {id: $ligand_id})
-                MATCH (residue {id: $residue_id})
+                MATCH (ligand:Entity)
+                WHERE ligand.id = $ligand_id
+                   OR toLower(ligand.name) = toLower($ligand_id)
+                   OR toLower(replace(ligand.name, '-', '_')) = toLower(replace($ligand_id, '-', '_'))
+                WITH ligand ORDER BY
+                    CASE WHEN ligand.id = $ligand_id THEN 0 ELSE 1 END
+                LIMIT 1
+                MATCH (residue:Entity)
+                WHERE residue.id = $residue_id
+                   OR toLower(residue.name) = toLower($residue_id)
+                   OR residue.id = 'residue_' + $residue_id
+                WITH ligand, residue ORDER BY
+                    CASE WHEN residue.id = $residue_id THEN 0 ELSE 1 END
+                LIMIT 1
                 MERGE (ligand)-[r:RELATIONSHIP {id: $rel_id}]->(residue)
                 SET r.type = 'INTERACTS_WITH',
                     r.properties = $properties,
                     r.experiment_id = $experiment_id,
                     r.created_at = datetime()
-                RETURN r
+                RETURN ligand.id AS matched_ligand, residue.id AS matched_residue, r
             """, {
                 "ligand_id": ligand_id,
                 "residue_id": residue_id,
@@ -1183,14 +1349,19 @@ def create_interaction_relationship(
                 "experiment_id": experiment_id
             })
 
-            if not result.single():
-                return {"success": False, "error": "Failed to create relationship - entities not found"}
+            record = result.single()
+            if not record:
+                return {"success": False, "error": f"Entities not found - ligand: {ligand_id}, residue: {residue_id}"}
 
+        matched_ligand = record["matched_ligand"]
+        matched_residue = record["matched_residue"]
         driver.close()
         return {
             "success": True,
             "relationship_id": relationship_id,
-            "message": f"Created INTERACTS_WITH: {ligand_id} → {residue_id} ({interaction_type})"
+            "matched_ligand_id": matched_ligand,
+            "matched_residue_id": matched_residue,
+            "message": f"Created INTERACTS_WITH: {matched_ligand} → {matched_residue} ({interaction_type})"
         }
 
     except Exception as e:
@@ -1649,6 +1820,11 @@ def get_sar_from_graph(
     - Residues with multiple good-binding ligands
     - Ligand property → binding correlations
     """
+    # ===== VERIFICATION LOGGING: get_sar_from_graph CALLED =====
+    logger.info(f"[get_sar_from_graph] ===== VERIFY: PLANNING AGENT SAR QUERY =====")
+    logger.info(f"[get_sar_from_graph] [VERIFY] min_ligands: {min_ligands}")
+    logger.info(f"[get_sar_from_graph] [VERIFY] This query requires INTERACTS_WITH relationships in Neo4j!")
+
     try:
         driver, database = get_neo4j_driver()
         patterns = []
@@ -1712,6 +1888,18 @@ def get_sar_from_graph(
                 })
 
         driver.close()
+
+        # ===== VERIFICATION LOGGING: get_sar_from_graph RESULT =====
+        logger.info(f"[get_sar_from_graph] [VERIFY] Found {len(patterns)} SAR patterns")
+        if patterns:
+            for i, pat in enumerate(patterns):
+                logger.info(f"[get_sar_from_graph] [VERIFY] pattern[{i}]: type={pat.get('pattern_type')}, title={pat.get('title')}")
+        else:
+            logger.warning(f"[get_sar_from_graph] [VERIFY] ⚠ NO SAR PATTERNS FOUND!")
+            logger.warning(f"[get_sar_from_graph] [VERIFY] This means NO INTERACTS_WITH relationships exist in Neo4j.")
+            logger.warning(f"[get_sar_from_graph] [VERIFY] Root cause: analyze_interactions returned empty, OR build_knowledge_graph was never called.")
+        logger.info(f"[get_sar_from_graph] ===== END PLANNING AGENT SAR QUERY =====")
+
         return {
             "success": True,
             "n_patterns": len(patterns),
@@ -1719,6 +1907,7 @@ def get_sar_from_graph(
         }
 
     except Exception as e:
+        logger.error(f"[get_sar_from_graph] [VERIFY] ERROR: {str(e)}")
         return {"success": False, "error": str(e)}
 
 
@@ -1972,14 +2161,19 @@ Built knowledge graph with {kg_result.get('n_entities', 0)} entities."""
 # =============================================================================
 
 def generate_publication_figure(
-    experiment_artifact_id: str,
+    experiment_artifact_id: str = None,
     figure_type: str = "sar_summary",
     title: str = None,
     include_annotations: bool = True,
+    ligand_names: str = None,
+    custom_data_json: str = None,
+    query_knowledge_graph: bool = True,
     tool_context: ToolContext = None
 ) -> dict:
     """
     Generate publication-ready figures using Gemini 3's code_execution_with_images.
+
+    FLEXIBLE: Works with experiment data, knowledge graph, or custom data.
 
     Uses Gemini's ability to:
     - Visual plotting with Matplotlib
@@ -1987,33 +2181,138 @@ def generate_publication_figure(
     - Image annotation with arrows, boxes
 
     Args:
-        experiment_artifact_id: Experiment Matrix artifact ID
+        experiment_artifact_id: (Optional) Experiment Matrix artifact ID
         figure_type: Type of figure to generate:
             - "sar_summary": SAR insight summary with energy rankings
             - "energy_landscape": Binding energy landscape across ligands/clusters
-            - "interaction_heatmap": Interaction type heatmap
+            - "interaction_heatmap": Interaction type heatmap (ligand vs residue)
             - "ucb_ranking": UCB ranking bar chart
+            - "binding_pose": 3D binding pose schematic
+            - "custom": Use custom_data_json for any visualization
         title: Custom title for the figure
         include_annotations: Whether to add annotations explaining key findings
+        ligand_names: Comma-separated ligand names to query from knowledge graph
+                     (e.g., "Ligand-47, Fasudil, Ligand-23")
+        custom_data_json: JSON string with custom data for visualization
+                         Format: {"ligands": [{"name": "X", "energy": -5.0, ...}], ...}
+        query_knowledge_graph: If True and no experiment, query Neo4j for data
 
     Returns:
         dict with artifact_id containing the generated figure
     """
-    # Get experiment data
-    artifact = read_artifact(experiment_artifact_id)
-    if not artifact:
-        return {"success": False, "error": "Experiment not found"}
+    completed = []
+    ligand_results = []
+    ucb_rankings = []
+    sar_insights = []
 
-    content = artifact.get("content", {})
-    ligand_results = content.get("ligand_results", [])
-    completed = [r for r in ligand_results if r.get("status") == "completed" and r.get("best_energy")]
+    # Strategy 1: Use existing experiment artifact
+    if experiment_artifact_id:
+        artifact = read_artifact(experiment_artifact_id)
+        if artifact:
+            content = artifact.get("content", {})
+            ligand_results = content.get("ligand_results", [])
+            completed = [r for r in ligand_results if r.get("status") == "completed" and r.get("best_energy")]
 
+    # Strategy 2: Use custom data provided directly
+    if not completed and custom_data_json:
+        try:
+            custom_data = json.loads(custom_data_json)
+            completed = custom_data.get("ligands", [])
+            # Normalize format
+            for item in completed:
+                if "best_energy" not in item and "energy" in item:
+                    item["best_energy"] = item["energy"]
+                if "ligand_name" not in item and "name" in item:
+                    item["ligand_name"] = item["name"]
+        except json.JSONDecodeError:
+            pass
+
+    # Strategy 3: Query knowledge graph for ligand data
+    if not completed and query_knowledge_graph:
+        try:
+            driver, database = get_neo4j_driver()
+            with driver.session(database=database) as session:
+                # Parse ligand names if provided
+                name_filter = ""
+                params = {}
+                if ligand_names:
+                    names_list = [n.strip() for n in ligand_names.split(",")]
+                    name_filter = "WHERE l.name IN $names OR l.id IN $names"
+                    params["names"] = names_list
+
+                # Query ligands with their docking results and interactions
+                query = f"""
+                    MATCH (l:Entity {{type: 'Ligand'}})
+                    {name_filter}
+                    OPTIONAL MATCH (l)-[dock:RELATIONSHIP {{type: 'DOCKS_TO'}}]->(target)
+                    OPTIONAL MATCH (l)-[interact:RELATIONSHIP {{type: 'INTERACTS_WITH'}}]->(residue:Entity)
+                    WITH l, dock, target,
+                         collect(DISTINCT {{
+                             residue: residue.name,
+                             type: interact.properties
+                         }}) AS interactions
+                    RETURN l.name AS name,
+                           l.id AS id,
+                           l.properties AS properties,
+                           dock.properties AS dock_props,
+                           interactions
+                    LIMIT 20
+                """
+                result = session.run(query, params)
+
+                for record in result:
+                    ligand_data = {
+                        "ligand_name": record["name"],
+                        "name": record["name"],
+                        "status": "completed",
+                        "interaction_types": [],
+                        "interactions": record["interactions"] or [],
+                    }
+                    # Extract energy from dock properties
+                    if record["dock_props"]:
+                        try:
+                            dock_props = json.loads(record["dock_props"]) if isinstance(record["dock_props"], str) else record["dock_props"]
+                            ligand_data["best_energy"] = dock_props.get("best_energy", dock_props.get("energy", -5.0))
+                        except:
+                            ligand_data["best_energy"] = -5.0
+                    else:
+                        # Default energy for visualization
+                        ligand_data["best_energy"] = -5.0
+
+                    # Extract interaction types
+                    for inter in (record["interactions"] or []):
+                        if inter.get("type"):
+                            try:
+                                props = json.loads(inter["type"]) if isinstance(inter["type"], str) else inter["type"]
+                                itype = props.get("interaction_type", "unknown")
+                                if itype not in ligand_data["interaction_types"]:
+                                    ligand_data["interaction_types"].append(itype)
+                            except:
+                                pass
+
+                    completed.append(ligand_data)
+            driver.close()
+        except Exception as e:
+            logger.warning(f"Knowledge graph query failed: {e}")
+
+    # If still no data, create a helpful message instead of failing
     if not completed:
-        return {"success": False, "error": "No completed docking results to visualize"}
+        return {
+            "success": False,
+            "error": "No data available. Provide: experiment_artifact_id, ligand_names, or custom_data_json",
+            "hint": "Example: generate_publication_figure(ligand_names='Ligand-47, Fasudil', figure_type='interaction_heatmap')"
+        }
 
-    # Calculate rankings and insights for context
-    ucb_rankings = calculate_ucb_ranking(ligand_results)
-    sar_insights = discover_sar_insights(ligand_results)
+    # Calculate rankings and insights for context (use completed if ligand_results is empty)
+    data_for_analysis = ligand_results if ligand_results else completed
+    try:
+        ucb_rankings = calculate_ucb_ranking(data_for_analysis)
+    except Exception:
+        ucb_rankings = []
+    try:
+        sar_insights = discover_sar_insights(data_for_analysis)
+    except Exception:
+        sar_insights = []
 
     # Prepare data for Gemini
     data_context = {
@@ -2073,21 +2372,94 @@ Style: publication quality, 10x8 inches, 300 DPI.
 Return as base64 PNG.
 """
     elif figure_type == "interaction_heatmap":
-        code_prompt = f"""Generate an interaction type heatmap.
+        # Fetch detailed INTERACTS_WITH data from knowledge graph
+        interaction_matrix = []
+        try:
+            driver, database = get_neo4j_driver()
+            with driver.session(database=database) as session:
+                result = session.run("""
+                    MATCH (l:Entity {type: 'Ligand'})-[r:RELATIONSHIP {type: 'INTERACTS_WITH'}]->(res:Entity)
+                    RETURN l.name AS ligand, res.name AS residue, r.properties AS props
+                """)
+                for record in result:
+                    props = {}
+                    if record["props"]:
+                        try:
+                            props = json.loads(record["props"]) if isinstance(record["props"], str) else record["props"]
+                        except:
+                            pass
+                    interaction_matrix.append({
+                        "ligand": record["ligand"],
+                        "residue": record["residue"],
+                        "type": props.get("interaction_type", "unknown"),
+                        "distance": props.get("distance_angstrom", None)
+                    })
+            driver.close()
+        except Exception as e:
+            logger.warning(f"Could not fetch interaction matrix: {e}")
+
+        # Add to context
+        data_context["interaction_matrix"] = interaction_matrix
+
+        code_prompt = f"""Generate a ligand-residue interaction heatmap.
 
 Data:
 {json.dumps(data_context, indent=2)}
 
 Create a matplotlib figure with:
-1. Binary heatmap: ligands (rows) vs interaction types (columns)
-2. Color: presence (blue) / absence (white)
-3. Add energy values as text annotations
-4. Title: "{data_context['title']}"
+1. Heatmap: ligands (rows) vs residues (columns)
+2. Cell colors by interaction type:
+   - pi_stacking: purple (#9b59b6)
+   - h_bond: blue (#3498db)
+   - hydrophobic: green (#27ae60)
+   - ionic/charged: red (#e74c3c)
+   - unknown: gray (#95a5a6)
+3. If 'interaction_matrix' is provided, use it for precise ligand-residue mapping
+4. Add a legend for interaction types
+5. Title: "{data_context['title']}"
 
-Style: publication quality, 10x6 inches, 300 DPI.
+Style: publication quality, 12x8 inches, 300 DPI.
+Use seaborn heatmap style if available.
 Return as base64 PNG.
 """
-    else:  # ucb_ranking
+    elif figure_type == "binding_pose":
+        code_prompt = f"""Generate a schematic binding pose diagram.
+
+Data:
+{json.dumps(data_context, indent=2)}
+
+Create a matplotlib figure with:
+1. Stylized 2D representation of protein-ligand binding
+2. Show the ligand as a central molecule shape
+3. Draw residues around it with interaction lines:
+   - Dashed lines for H-bonds
+   - Wavy lines for hydrophobic
+   - Double lines for pi-stacking
+4. Label each residue (Y125, Y133, Y136, etc.)
+5. Add distance annotations if available
+6. Title: "{data_context['title']}"
+
+Style: publication quality, 10x10 inches, 300 DPI.
+Use a clean, schematic style like LigPlot.
+Return as base64 PNG.
+"""
+    elif figure_type == "custom":
+        # User provides their own visualization request via title
+        code_prompt = f"""Generate a custom publication figure.
+
+Data available:
+{json.dumps(data_context, indent=2)}
+
+User request: {title or 'Create a clear, informative visualization of the data'}
+
+Create a matplotlib figure that best represents the user's request.
+Use appropriate chart types based on the data structure.
+Ensure publication quality: 300 DPI, clean fonts, proper legends.
+Figure size: 10x8 inches.
+
+Return as base64 PNG.
+"""
+    else:  # ucb_ranking (default)
         code_prompt = f"""Generate a UCB ranking visualization.
 
 Data:
@@ -2117,8 +2489,8 @@ Return as base64 PNG.
             tools=[types.Tool(code_execution=types.ToolCodeExecution())]
         )
 
-        # Try gemini-3-flash first (has code execution), fallback to 2.0
-        model_name = "gemini-2.0-flash-exp"  # Latest with code execution
+        # Gemini 3 Flash has code_execution capability
+        model_name = "gemini-3-flash-preview"  # Verified to support code_execution
         try:
             response = client.models.generate_content(
                 model=model_name,
@@ -2376,7 +2748,7 @@ Return the annotated image."""
         )
 
         response = client.models.generate_content(
-            model="gemini-2.0-flash-exp",
+            model="gemini-3-flash-preview",
             contents=[prompt, image_part],
             config=config
         )
@@ -2539,8 +2911,8 @@ If details are hard to see, use Python code to:
             mime_type="image/png"
         )
 
-        # Gemini 3 Flash with agentic vision
-        model_name = "gemini-2.0-flash-exp"  # Has code_execution_with_images
+        # Gemini 3 Flash with agentic vision + code_execution
+        model_name = "gemini-3-flash-preview"  # Verified to support code_execution
 
         response = client.models.generate_content(
             model=model_name,
@@ -2877,6 +3249,13 @@ async def visualize_ligand_3d(
     Returns:
         3D visualization artifact with interactive HTML viewer (visible in ADK web Artifacts tab)
     """
+    # ===== VERIFICATION LOGGING: visualize_ligand_3d CALLED =====
+    logger.info(f"[visualize_ligand_3d] ===== VERIFY: PLANNING AGENT VISUALIZATION =====")
+    logger.info(f"[visualize_ligand_3d] [VERIFY] ligand_name: {ligand_name}")
+    logger.info(f"[visualize_ligand_3d] [VERIFY] ligand_smiles: {ligand_smiles[:50] if ligand_smiles else None}...")
+    logger.info(f"[visualize_ligand_3d] [VERIFY] protein_name: {protein_name}")
+    logger.info(f"[visualize_ligand_3d] [VERIFY] NOTE: If this is called after KG queries returned empty, agent is falling back to visualization.")
+
     import os
     import json
     from pathlib import Path

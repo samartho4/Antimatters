@@ -135,6 +135,11 @@ export interface Artifact {
   run_id: string;
   created_at: string;
   content: any;
+  version?: number;  // Artifact version for real-time updates
+  metadata?: {
+    version?: number;
+    updated_at?: string;
+  };
 }
 
 export interface TaskListContent {
@@ -608,6 +613,22 @@ export class AGUIService {
   }
 
   /**
+   * Clear all artifacts and emit event to notify React subscribers.
+   * Use this instead of direct assignment (aguiService.artifacts = [])
+   * to ensure React state updates properly.
+   */
+  clearArtifacts(): void {
+    this.artifacts = [];
+    this.toolCalls = [];
+    // Emit a custom event so React hooks pick up the change
+    this.eventSubject.next({
+      type: EventType.CUSTOM,
+      name: 'artifacts_cleared',
+      timestamp: Date.now()
+    });
+  }
+
+  /**
    * Helper: Create user message
    */
   createUserMessage(content: string): Message {
@@ -738,14 +759,40 @@ export function useAGUIAgent() {
     return () => subscription.unsubscribe();
   }, []);
 
-  const runAgent = useCallback(async (message: string, mode?: ResearchMode, annotation?: AnnotationRegion) => {
+  /**
+   * Run agent with optional conversation history.
+   *
+   * FIX 2: Pass conversation history from frontend (following agent-chat-ui pattern)
+   * @param message - Current user message
+   * @param mode - 'planning' or 'serendipitize'
+   * @param annotation - Optional annotation with screenshot
+   * @param conversationHistory - Optional array of prior messages for context
+   */
+  const runAgent = useCallback(async (
+    message: string,
+    mode?: ResearchMode,
+    annotation?: AnnotationRegion,
+    conversationHistory?: Array<{ id: string; role: string; content: string }>
+  ) => {
     setIsRunning(true);
     setError(null);
     setTextContent('');
 
     try {
+      // Build messages array: prior history + new message (like agent-chat-ui stream.submit)
+      const historyMessages = conversationHistory
+        ? conversationHistory.map(m => ({
+            id: m.id,
+            role: m.role as 'user' | 'assistant' | 'system' | 'tool',
+            content: m.content
+          }))
+        : [];
+
+      const newMessage = aguiService.createUserMessage(message);
+      const allMessages = [...historyMessages, newMessage];
+
       await aguiService.runAgent({
-        messages: [aguiService.createUserMessage(message)],
+        messages: allMessages,  // Pass ALL messages, not just current!
         mode,
         annotation
       });

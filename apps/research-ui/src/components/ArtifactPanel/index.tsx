@@ -99,15 +99,8 @@ function findBestArtifactIndex(artifacts: Artifact[]): number {
 }
 
 // =============================================================================
-// Type badge styling - minimal, professional design
-// Following modern artifact UI principles (Claude.ai, GitHub, Linear)
+// Helpers
 // =============================================================================
-
-function getTypeBadgeClasses(_type?: string): string {
-  // Minimal design: subtle muted tones, consistent across all types
-  // Let content hierarchy speak, not loud colors
-  return 'bg-slate-700/30 text-slate-400 border border-slate-600/20';
-}
 
 function getArtifactTitle(artifact?: Artifact): string {
   if (!artifact) return 'Untitled';
@@ -428,7 +421,16 @@ export function ArtifactPanel({
   if (visibleArtifacts.length === 0) {
     return (
       <div className={`bg-am-primary flex flex-col ${isExpanded ? 'fixed inset-0 z-50' : 'h-full'}`}>
-        <Header title="Artifacts" artifactType={undefined} isExpanded={isExpanded} onToggleExpand={() => setIsExpanded(!isExpanded)} onClose={undefined} />
+        {/* Minimal empty header */}
+        <div className="flex-shrink-0 flex items-center justify-between px-3 py-2.5 border-b border-am-border/50">
+          <h2 className="text-sm font-medium text-am-text-primary">Artifacts</h2>
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="p-1.5 text-am-text-muted hover:text-am-text-secondary transition-colors"
+          >
+            {isExpanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+          </button>
+        </div>
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center px-8">
             <div className="w-14 h-14 mx-auto mb-3 rounded-xl bg-am-tertiary flex items-center justify-center">
@@ -453,42 +455,66 @@ export function ArtifactPanel({
   const canGoBack     = selectedIndex > 0;
   const canGoForward  = selectedIndex < visibleArtifacts.length - 1;
 
+  // Get version from artifact (top-level or metadata)
+  const currentVersion = currentArtifact?.version ?? currentArtifact?.metadata?.version;
+
   return (
     <div className={`bg-am-primary flex flex-col ${isExpanded ? 'fixed inset-0 z-50' : 'h-full'}`}>
-      {/* Header */}
-      <Header
-        title={getArtifactTitle(currentArtifact)}
-        artifactType={currentArtifact?.type}
-        isExpanded={isExpanded}
-        onToggleExpand={() => setIsExpanded(!isExpanded)}
-        onClose={onClose ? () => onClose(currentArtifact.id) : undefined}
-      />
-
-      {/* Navigation — only when multiple */}
-      {hasMultiple && (
-        <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 border-b border-am-border bg-am-secondary/40">
-          <div className="flex items-center gap-1">
+      {/* Minimal Header — Steve Jobs style: one clean row */}
+      <div className="flex-shrink-0 flex items-center gap-2 px-3 py-2.5 border-b border-am-border/50">
+        {/* Navigation arrows (only if multiple artifacts) */}
+        {hasMultiple && (
+          <div className="flex items-center">
             <button
               onClick={() => canGoBack && selectIndex(selectedIndex - 1)}
               disabled={!canGoBack}
-              className="p-1.5 rounded-lg text-am-text-muted hover:text-am-text-primary hover:bg-am-tertiary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="p-1 text-am-text-muted hover:text-am-text-primary disabled:opacity-20 transition-colors"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <span className="text-xs text-am-text-muted px-1">
-              {selectedIndex + 1} / {visibleArtifacts.length}
-            </span>
             <button
               onClick={() => canGoForward && selectIndex(selectedIndex + 1)}
               disabled={!canGoForward}
-              className="p-1.5 rounded-lg text-am-text-muted hover:text-am-text-primary hover:bg-am-tertiary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="p-1 text-am-text-muted hover:text-am-text-primary disabled:opacity-20 transition-colors"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
-          <ArtifactSelector artifacts={visibleArtifacts} selectedIndex={selectedIndex} onSelect={selectIndex} />
+        )}
+
+        {/* Title + Version */}
+        <div className="flex-1 min-w-0 flex items-center gap-2">
+          <h2 className="text-sm font-medium text-am-text-primary truncate">
+            {getArtifactTitle(currentArtifact)}
+          </h2>
+          {currentVersion !== undefined && (
+            <span className="flex-shrink-0 text-[10px] text-am-accent font-mono">
+              v{currentVersion}
+            </span>
+          )}
         </div>
-      )}
+
+        {/* Actions */}
+        <div className="flex items-center gap-0.5">
+          {hasMultiple && (
+            <ArtifactSelector artifacts={visibleArtifacts} selectedIndex={selectedIndex} onSelect={selectIndex} />
+          )}
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="p-1.5 text-am-text-muted hover:text-am-text-secondary transition-colors"
+          >
+            {isExpanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+          </button>
+          {onClose && (
+            <button
+              onClick={() => onClose(currentArtifact.id)}
+              className="p-1.5 text-am-text-muted hover:text-am-text-secondary transition-colors"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* Document body */}
       <div className="flex-1 overflow-y-auto relative" ref={containerRef} onContextMenu={handleContextMenu}>
@@ -593,47 +619,6 @@ export function ArtifactPanel({
 }
 
 // =============================================================================
-// Header
-// =============================================================================
-
-function Header({
-  title,
-  artifactType,
-  isExpanded,
-  onToggleExpand,
-  onClose,
-}: {
-  title: string;
-  artifactType?: string;
-  isExpanded: boolean;
-  onToggleExpand: () => void;
-  onClose?: () => void;
-}) {
-  return (
-    <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-am-border bg-am-secondary">
-      <div className="flex-1 min-w-0 flex items-center gap-2">
-        <h2 className="text-sm font-semibold text-am-text-primary truncate">{title}</h2>
-        {artifactType && (
-          <span className={`flex-shrink-0 px-2 py-0.5 rounded-md text-xs font-normal capitalize ${getTypeBadgeClasses(artifactType)}`}>
-            {artifactType.replace(/_/g, ' ')}
-          </span>
-        )}
-      </div>
-      <div className="flex items-center gap-1 ml-2">
-        <button onClick={onToggleExpand} className="p-1.5 text-am-text-muted hover:text-am-text-secondary hover:bg-am-tertiary rounded transition-colors" title={isExpanded ? 'Minimize' : 'Fullscreen'}>
-          {isExpanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-        </button>
-        {onClose && (
-          <button onClick={onClose} className="p-1.5 text-am-text-muted hover:text-am-text-secondary hover:bg-am-tertiary rounded transition-colors">
-            <X className="w-4 h-4" />
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// =============================================================================
 // Artifact selector dropdown
 // =============================================================================
 
@@ -678,10 +663,10 @@ function ArtifactSelector({
                 <div className="flex-1 min-w-0 text-left">
                   <div className="truncate font-medium">{getArtifactTitle(artifact)}</div>
                   <div className="text-[10px] text-am-text-muted flex items-center gap-1.5">
-                    <span className={`px-1.5 py-0.2 rounded ${getTypeBadgeClasses(artifact.type)}`} style={{ fontSize: '9px' }}>
-                      {artifact.type.replace(/_/g, ' ')}
-                    </span>
-                    <span>{new Date(artifact.created_at).toLocaleTimeString()}</span>
+                    {(artifact.version !== undefined || artifact.metadata?.version !== undefined) && (
+                      <span className="text-am-accent font-mono">v{artifact.version ?? artifact.metadata?.version}</span>
+                    )}
+                    <span className="opacity-60">{artifact.type.replace(/_/g, ' ')}</span>
                   </div>
                 </div>
               </button>

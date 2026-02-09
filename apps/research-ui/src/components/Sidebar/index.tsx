@@ -9,17 +9,11 @@ import {
   Plus,
   ChevronDown,
   ChevronRight,
-  Wrench,
   FileText,
-  BookOpen,
   BarChart3,
   MessageSquare,
   Settings,
-  HelpCircle,
-  Inbox,
-  FolderOpen,
   Atom,
-  Database,
   FlaskConical,
   Sparkles,
   PanelLeftClose,
@@ -198,86 +192,29 @@ export function Sidebar({
           )}
         </SidebarSection>
 
-        {/* INFORMATION Section */}
-        <SidebarSection
-          title="Information"
-          icon={Database}
-          isExpanded={expandedSections.information}
-          onToggle={() => toggleSection('information')}
-        >
-          {/* Tools */}
-          <div className="space-y-0.5">
-            <div className="px-3 py-1 text-[10px] font-medium text-am-text-muted uppercase tracking-wider">
-              Tools ({tools.length})
-            </div>
-            {Object.entries(toolsByCategory).slice(0, 3).map(([category, categoryTools]) => (
-              <div key={category} className="space-y-0.5">
-                {categoryTools.slice(0, 3).map(tool => (
-                  <button
-                    key={tool.name}
-                    onClick={() => onSelectTool(tool)}
-                    className="w-full flex items-center gap-2 px-3 py-1 text-xs text-am-text-secondary hover:text-am-text-primary hover:bg-am-tertiary rounded-md transition-colors"
-                  >
-                    <Wrench className="w-3 h-3 flex-shrink-0 text-am-text-muted" />
-                    <span className="truncate">{formatToolName(tool.name)}</span>
-                  </button>
-                ))}
-              </div>
-            ))}
-            {tools.length > 9 && (
-              <button className="w-full px-3 py-1 text-[10px] text-am-accent hover:text-am-accent-hover">
-                View all {tools.length} tools...
-              </button>
-            )}
-          </div>
-
-          {/* Context/Data Sources */}
-          <div className="mt-2 space-y-0.5">
-            <div className="px-3 py-1 text-[10px] font-medium text-am-text-muted uppercase tracking-wider">
-              Data Sources
-            </div>
-            <DataSourceItem icon={Database} label="PED Ensembles" count={5} />
-            <DataSourceItem icon={FlaskConical} label="ChEMBL" count={22} />
-            <DataSourceItem icon={BookOpen} label="Literature" count={6} />
-          </div>
-        </SidebarSection>
-
-        {/* EVOLUTION Section - Opens full Evolution view */}
-        <div className="py-1">
-          <button
-            onClick={() => onSelectKnowledge?.(null as any)}
-            className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-am-text-secondary hover:text-am-text-primary hover:bg-am-tertiary rounded-md transition-colors min-h-[44px]"
-            aria-label={`Open Evolution knowledge browser. ${artifacts.length} artifacts available`}
-          >
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4" aria-hidden="true" />
-              <span>Evolution</span>
-              {artifacts.length > 0 && (
-                <span className="px-1.5 py-0.5 text-[9px] bg-am-tertiary text-am-text-muted rounded-full" aria-hidden="true">
-                  {artifacts.length}
-                </span>
-              )}
-            </div>
-            <ChevronRight className="w-3 h-3 text-am-text-muted" aria-hidden="true" />
-          </button>
-        </div>
       </div>
 
       {/* Footer */}
       <nav className="border-t border-am-border px-2 py-2 space-y-0.5" aria-label="Settings and help">
-        <button 
+        <button
+          onClick={() => onSelectKnowledge?.(null as any)}
+          className="w-full flex items-center gap-2 px-3 py-2 text-xs text-am-text-muted hover:text-am-text-secondary hover:bg-am-tertiary rounded-md transition-colors min-h-[44px]"
+          aria-label={`Open Evolution knowledge graph. ${artifacts.length} artifacts available`}
+        >
+          <Sparkles className="w-4 h-4" aria-hidden="true" />
+          <span>Evolution</span>
+          {artifacts.length > 0 && (
+            <span className="ml-auto px-1.5 py-0.5 text-[9px] bg-purple-500/20 text-purple-400 rounded-full">
+              {artifacts.length}
+            </span>
+          )}
+        </button>
+        <button
           className="w-full flex items-center gap-2 px-3 py-2 text-xs text-am-text-muted hover:text-am-text-secondary hover:bg-am-tertiary rounded-md transition-colors min-h-[44px]"
           aria-label="Open settings"
         >
           <Settings className="w-4 h-4" aria-hidden="true" />
           <span>Settings</span>
-        </button>
-        <button 
-          className="w-full flex items-center gap-2 px-3 py-2 text-xs text-am-text-muted hover:text-am-text-secondary hover:bg-am-tertiary rounded-md transition-colors min-h-[44px]"
-          aria-label="Get help and provide feedback"
-        >
-          <HelpCircle className="w-4 h-4" aria-hidden="true" />
-          <span>Help & Feedback</span>
         </button>
       </nav>
     </aside>

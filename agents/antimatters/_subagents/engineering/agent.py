@@ -334,6 +334,7 @@ async def update_ligand_result(
             print(f"Warning: Failed to update ADK artifact: {e}")
 
     return {
+        "artifact_id": artifact_id,  # Required for server to read updated artifact and emit event
         "success": bool(artifact),
         "ligand_name": ligand_name,
         "status": status,
@@ -961,10 +962,19 @@ class EngineerCoordinator(BaseAgent):
                                         return {"status": "error", "ligand": ligand_name, "error": dock_data.get('error', 'docking failed')}
 
                                     # Extract best energy from cluster_results
-                                    # Server returns: cluster_results=[{cluster_id, best_energy, best_residue}, ...]
+                                    # Server returns: cluster_results=[{cluster_id, frame_idx, best_energy, best_residue}, ...]
                                     cluster_results = dock_data.get('cluster_results', [])
+
+                                    # ===== VERIFICATION LOGGING: dock_ensemble output =====
+                                    logger.info(f"[{ligand_name}] ===== VERIFY: dock_ensemble RAW OUTPUT =====")
+                                    logger.info(f"[{ligand_name}] [VERIFY] cluster_results count: {len(cluster_results)}")
+                                    for i, cr in enumerate(cluster_results):
+                                        logger.info(f"[{ligand_name}] [VERIFY] cluster_results[{i}]: cluster_id={cr.get('cluster_id')}, frame_idx={cr.get('frame_idx')}, best_energy={cr.get('best_energy')}, best_residue={cr.get('best_residue')}")
+                                    logger.info(f"[{ligand_name}] ===== END dock_ensemble RAW OUTPUT =====")
+
                                     best_energy = None
                                     best_cluster = None
+                                    best_frame_idx = None  # CRITICAL: actual trajectory frame for analyze_interactions
                                     best_residue = None
                                     for cr in cluster_results:
                                         energy = cr.get('best_energy')
@@ -972,18 +982,84 @@ class EngineerCoordinator(BaseAgent):
                                             if best_energy is None or energy < best_energy:
                                                 best_energy = energy
                                                 best_cluster = cr.get('cluster_id')
+                                                best_frame_idx = cr.get('frame_idx')  # FIX: capture actual frame index
                                                 best_residue = cr.get('best_residue')
-                                    logger.info(f"[{ligand_name}] Docking complete: best energy {best_energy} kcal/mol, cluster {best_cluster}, residue {best_residue}")
 
-                                    # Step 3: Analyze interactions
-                                    # NOTE: analyze_interactions MCP function is broken (passes file path
-                                    # instead of residue index to trajectory_analysis functions). We skip it
-                                    # and use available data: best_residue + ligand_properties for visualization.
-                                    # See: server.py:analyze_interactions passes ligand_path (str) but
-                                    # trajectory_analysis.hbond expects ligand_residue_index (int)
-                                    logger.info(f"[{ligand_name}] Step 3/4: Skipping analyze_interactions (known broken)")
-                                    interactions = []  # Will use best_residue + ligand_props in visualization
-                                    logger.info(f"[{ligand_name}] Using dock_ensemble data: residue {best_residue}, cluster {best_cluster}")
+                                    # ===== VERIFICATION LOGGING: Best result selection =====
+                                    # Use both print() and logger.info() to ensure visibility
+                                    print(f"[{ligand_name}] [VERIFY] SELECTED BEST: energy={best_energy}, cluster_id={best_cluster}, frame_idx={best_frame_idx}, residue={best_residue}", flush=True)
+                                    print(f"[{ligand_name}] [VERIFY] NOTE: frame_idx ({best_frame_idx}) should be actual trajectory frame, NOT cluster_id ({best_cluster})", flush=True)
+                                    logger.info(f"[{ligand_name}] [VERIFY] SELECTED BEST: energy={best_energy}, cluster_id={best_cluster}, frame_idx={best_frame_idx}, residue={best_residue}")
+                                    logger.info(f"[{ligand_name}] [VERIFY] NOTE: frame_idx ({best_frame_idx}) should be actual trajectory frame, NOT cluster_id ({best_cluster})")
+
+                                    # Step 3: Analyze interactions (FIXED - Phase 2)
+                                    # analyze_interactions now properly:
+                                    # - Combines protein + ligand trajectories using MDTraj stack()
+                                    # - Extracts ligand features from SMILES (aromatic rings, H-bond donors, charged)
+                                    # - Returns interaction_types for Neo4j INTERACTS_WITH relationships
+                                    logger.info(f"[{ligand_name}] Step 3/4: Analyzing protein-ligand interactions")
+
+                                    # Use actual trajectory frame for analysis (NOT cluster_id!)
+                                    # dock_ensemble returns frame_idx (e.g., 42) which is the representative
+                                    # frame from the cluster, NOT the cluster number (0, 1, 2...)
+                                    analysis_frames = [best_frame_idx] if best_frame_idx is not None else [0]
+
+                                    # ===== VERIFICATION LOGGING: analyze_interactions INPUT =====
+                                    logger.info(f"[{ligand_name}] ===== VERIFY: analyze_interactions CALL =====")
+                                    logger.info(f"[{ligand_name}] [VERIFY] INPUT protein_pdb: {protein_pdb_path}")
+                                    logger.info(f"[{ligand_name}] [VERIFY] INPUT ligand_pdbqt: {pdbqt_path}")
+                                    logger.info(f"[{ligand_name}] [VERIFY] INPUT ligand_smiles: {smiles}")
+                                    logger.info(f"[{ligand_name}] [VERIFY] INPUT frame_indices: {analysis_frames} (should be frame_idx={best_frame_idx}, NOT cluster_id={best_cluster})")
+                                    logger.info(f"[{ligand_name}] ===== END analyze_interactions CALL =====")
+
+                                    try:
+                                        analyze_result = await session.call_tool(
+                                            "analyze_interactions",
+                                            arguments={
+                                                "protein_pdb": protein_pdb_path,
+                                                "ligand_pdbqt": pdbqt_path,
+                                                "ligand_smiles": smiles,  # Critical: enables aromatic/charge analysis
+                                                "frame_indices": analysis_frames,
+                                            }
+                                        )
+                                        analyze_data = json.loads(analyze_result.content[0].text)
+
+                                        # ===== VERIFICATION LOGGING: analyze_interactions OUTPUT =====
+                                        # Use print() for guaranteed visibility
+                                        print(f"[{ligand_name}] ===== VERIFY: analyze_interactions RAW OUTPUT =====", flush=True)
+                                        print(f"[{ligand_name}] [VERIFY] success: {analyze_data.get('success')}", flush=True)
+                                        print(f"[{ligand_name}] [VERIFY] interaction_types: {analyze_data.get('interaction_types', [])}", flush=True)
+                                        print(f"[{ligand_name}] [VERIFY] interactions count: {len(analyze_data.get('interactions', []))}", flush=True)
+                                        logger.info(f"[{ligand_name}] ===== VERIFY: analyze_interactions RAW OUTPUT =====")
+                                        logger.info(f"[{ligand_name}] [VERIFY] success: {analyze_data.get('success')}")
+                                        logger.info(f"[{ligand_name}] [VERIFY] interaction_types: {analyze_data.get('interaction_types', [])}")
+                                        logger.info(f"[{ligand_name}] [VERIFY] interactions count: {len(analyze_data.get('interactions', []))}")
+                                        if analyze_data.get('interactions'):
+                                            for idx, inter in enumerate(analyze_data.get('interactions', [])[:5]):  # First 5
+                                                logger.info(f"[{ligand_name}] [VERIFY] interaction[{idx}]: {inter}")
+                                        logger.info(f"[{ligand_name}] ===== END analyze_interactions RAW OUTPUT =====")
+
+                                        if analyze_data.get('success'):
+                                            interactions = analyze_data.get('interactions', [])
+                                            interaction_types = analyze_data.get('interaction_types', [])
+                                            # CRITICAL: This is what Evolution agent reads for INTERACTS_WITH
+                                            print(f"[{ligand_name}] [VERIFY] ★★★ EXTRACTED interaction_types for Neo4j: {interaction_types} ★★★", flush=True)
+                                            logger.info(f"[{ligand_name}] [VERIFY] EXTRACTED interaction_types for Neo4j: {interaction_types}")
+                                            if not interaction_types:
+                                                print(f"[{ligand_name}] [VERIFY] ⚠ WARNING: interaction_types is EMPTY! No INTERACTS_WITH will be created!", flush=True)
+                                                logger.warning(f"[{ligand_name}] [VERIFY] WARNING: interaction_types is EMPTY! No INTERACTS_WITH will be created in Neo4j!")
+                                        else:
+                                            logger.warning(f"[{ligand_name}] analyze_interactions failed: {analyze_data.get('error')}")
+                                            interactions = []
+                                            interaction_types = []
+                                    except Exception as e:
+                                        logger.warning(f"[{ligand_name}] analyze_interactions exception: {e}")
+                                        import traceback
+                                        logger.warning(f"[{ligand_name}] [VERIFY] EXCEPTION traceback: {traceback.format_exc()}")
+                                        interactions = []
+                                        interaction_types = []
+
+                                    logger.info(f"[{ligand_name}] Docking data: residue {best_residue}, cluster {best_cluster}")
 
                                     # Step 4: Save result to state
                                     logger.info(f"[{ligand_name}] Step 4/4: Saving results to state")
@@ -992,10 +1068,27 @@ class EngineerCoordinator(BaseAgent):
                                         "best_energy": best_energy,
                                         "best_cluster": best_cluster,
                                         "best_residue": best_residue,
-                                        "interactions": interactions,  # Empty since analyze_interactions is broken
+                                        "interactions": interactions,  # Raw interaction data from trajectory_analysis
+                                        "interaction_types": interaction_types,  # For Neo4j INTERACTS_WITH: ["h_bond", "hydrophobic", ...]
                                         "ligand_properties": ligand_props,
                                     }
-                                    ctx.session.state[f"docking:{run_id}:result:{ligand_name}"] = result_data
+                                    state_key = f"docking:{run_id}:result:{ligand_name}"
+                                    ctx.session.state[state_key] = result_data
+
+                                    # ===== VERIFICATION LOGGING: Final result stored =====
+                                    logger.info(f"[{ligand_name}] ===== VERIFY: FINAL RESULT STORED =====")
+                                    logger.info(f"[{ligand_name}] [VERIFY] state_key: {state_key}")
+                                    logger.info(f"[{ligand_name}] [VERIFY] result_data.status: {result_data.get('status')}")
+                                    logger.info(f"[{ligand_name}] [VERIFY] result_data.best_energy: {result_data.get('best_energy')}")
+                                    logger.info(f"[{ligand_name}] [VERIFY] result_data.best_cluster: {result_data.get('best_cluster')}")
+                                    logger.info(f"[{ligand_name}] [VERIFY] result_data.best_residue: {result_data.get('best_residue')}")
+                                    logger.info(f"[{ligand_name}] [VERIFY] result_data.interaction_types: {result_data.get('interaction_types')}")
+                                    logger.info(f"[{ligand_name}] [VERIFY] result_data.interactions count: {len(result_data.get('interactions', []))}")
+                                    if result_data.get('interaction_types'):
+                                        logger.info(f"[{ligand_name}] [VERIFY] ✓ GOOD: interaction_types has data, Evolution agent will create INTERACTS_WITH relationships")
+                                    else:
+                                        logger.warning(f"[{ligand_name}] [VERIFY] ⚠ WARNING: interaction_types is EMPTY, Evolution agent will NOT create INTERACTS_WITH!")
+                                    logger.info(f"[{ligand_name}] ===== END FINAL RESULT STORED =====")
 
                                     logger.info(f"[{ligand_name}] ✓ Workflow complete")
                                     return {"status": "success", "ligand": ligand_name, "energy": best_energy}
@@ -1597,14 +1690,13 @@ def visualize_docking_result(
     Visualize a specific docking result from the experiment matrix.
 
     Loads the protein and ligand, highlights the binding site,
-    and creates an interactive 3D viewer using AVAILABLE data.
+    and creates an interactive 3D viewer with interaction annotations.
 
-    NOTE: analyze_interactions MCP function is currently broken (passes file path
-    instead of residue index). This function works robustly with:
-    - best_residue from dock_ensemble
-    - Binding site residues from protocol (C-terminal 121-140 for alpha-synuclein)
+    Data sources (Phase 2 fix: analyze_interactions now provides real data):
+    - best_residue from dock_ensemble (binding site)
+    - interaction_types from analyze_interactions (h_bond, hydrophobic, aromatic, ionic)
+    - interactions from trajectory_analysis (raw H-bond, hydrophobic contact data)
     - ligand_properties from prepare_ligand (aromatic_rings, h_bond_donors)
-    - interaction_types if any were populated
 
     Args:
         experiment_artifact_id: Experiment Matrix artifact ID
@@ -1649,8 +1741,8 @@ def visualize_docking_result(
     has_hbond_donors = bool(ligand_props.get("hbond_donors"))
     has_charged = bool(ligand_props.get("pos_charges"))
 
-    # Build interaction data from AVAILABLE sources (not broken analyze_interactions)
-    # Use best_residue + ligand properties to infer likely interaction types
+    # Build interaction data from stored interactions + best_residue fallback
+    # Phase 2: analyze_interactions now provides real data; fallback to inference if empty
     interaction_data = {"hbonds": [], "hydrophobic": [], "aromatic": []}
 
     if best_residue:
@@ -1660,14 +1752,14 @@ def visualize_docking_result(
         if has_aromatics:
             interaction_data["aromatic"].append({"residue": best_residue, "inferred": True})
 
-    # Also check if there are any stored interactions (might be empty due to broken server)
+    # Load real interaction data from analyze_interactions
     stored_interactions = ligand_result.get("interactions", [])
-    interaction_types = ligand_result.get("interaction_types", [])
+    interaction_types = ligand_result.get("interaction_types", [])  # e.g., ["h_bond", "hydrophobic", "aromatic"]
 
     if stored_interactions and isinstance(stored_interactions, list):
         for item in stored_interactions:
             if isinstance(item, dict):
-                # Real interaction data from analyze_interactions (if it worked)
+                # Real interaction data from trajectory_analysis (Phase 2 fix)
                 for key in ["hbonds", "hydrophobic", "aromatic"]:
                     for contact in item.get(key, []):
                         res = contact.get("residue") or contact.get("protein_residue")
