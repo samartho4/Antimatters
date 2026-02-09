@@ -27,9 +27,14 @@ interface Workspace {
 }
 
 interface ComputationProps {
-  messages: Array<{ id: string; role: string; content: string }>;
+  messages: Array<{
+    id: string;
+    role: string;
+    content: string;
+    screenshot_base64?: string;  // For annotated messages
+    tool_calls?: ToolCall[];  // Per-message tool calls (not global)
+  }>;
   artifacts: Artifact[];
-  toolCalls: ToolCall[];
   isRunning: boolean;
   currentTool: string | null;
   textContent?: string;   // kept for backward-compat; no longer rendered here
@@ -106,10 +111,17 @@ function renderMd(raw: string): string {
   }).join('');
 }
 
+// Entity for @ autocomplete
+interface KGEntity {
+  id: string;
+  type: string;
+  name: string;
+  properties: Record<string, any>;
+}
+
 export function Computation({
   messages,
   artifacts,
-  toolCalls,
   isRunning,
   currentTool,
   onSend,
@@ -128,12 +140,63 @@ export function Computation({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // @ autocomplete state
+  const [kgEntities, setKgEntities] = useState<KGEntity[]>([]);
+  const [showAtMenu, setShowAtMenu] = useState(false);
+  const [atQuery, setAtQuery] = useState('');
+  const [atMenuPosition, setAtMenuPosition] = useState({ top: 0, left: 0 });
+  const [selectedAtIndex, setSelectedAtIndex] = useState(0);
+
   const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId);
 
-  // Auto-scroll to bottom
+  // Fetch KG entities for @ autocomplete (deduplicated)
+  useEffect(() => {
+    console.log('[@ autocomplete] Starting fetch...');
+    fetch('http://localhost:8002/evolution/graph')
+      .then(r => {
+        console.log('[@ autocomplete] Response status:', r.status);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then(data => {
+        console.log('[@ autocomplete] Raw response:', data);
+        // API returns {entities: [...]} directly (no success wrapper)
+        const entities = data.entities || [];
+        console.log('[@ autocomplete] Entities count:', entities.length);
+
+        if (entities.length === 0) {
+          console.warn('[@ autocomplete] No entities returned from API');
+          return;
+        }
+
+        // Deduplicate by name+type
+        const seen = new Map<string, KGEntity>();
+        for (const e of entities) {
+          const key = `${e.type}:${e.name}`.toLowerCase();
+          if (!seen.has(key)) {
+            seen.set(key, e);
+          }
+        }
+        const deduped = Array.from(seen.values());
+        console.log(`[@ autocomplete] Setting ${deduped.length} deduplicated entities`);
+        setKgEntities(deduped);
+      })
+      .catch(err => {
+        console.error('[@ autocomplete] FETCH ERROR:', err);
+      });
+  }, []);
+
+  // Filter entities for @ menu
+  const filteredEntities = kgEntities.filter(e => {
+    if (!atQuery) return true;
+    const q = atQuery.toLowerCase();
+    return e.name.toLowerCase().includes(q) || e.type.toLowerCase().includes(q);
+  }).slice(0, 8);
+
+  // Auto-scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, toolCalls.length]);
+  }, [messages]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -142,6 +205,49 @@ export function Computation({
       inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 200) + 'px';
     }
   }, [input]);
+
+  // Handle input changes - detect @ for autocomplete
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    const cursorPos = e.target.selectionStart;
+    setInput(value);
+
+    // Find @ before cursor
+    const textBeforeCursor = value.slice(0, cursorPos);
+    const atMatch = textBeforeCursor.match(/@([^\s@]*)$/);
+
+    if (atMatch) {
+      setAtQuery(atMatch[1]);
+      setShowAtMenu(true);
+      setSelectedAtIndex(0);
+
+      // Position menu above textarea
+      if (inputRef.current) {
+        const rect = inputRef.current.getBoundingClientRect();
+        setAtMenuPosition({ top: rect.top - 8, left: rect.left + 16 });
+      }
+    } else {
+      setShowAtMenu(false);
+      setAtQuery('');
+    }
+  };
+
+  // Insert @ reference into input
+  const insertAtReference = (entity: KGEntity) => {
+    const cursorPos = inputRef.current?.selectionStart || input.length;
+    const textBeforeCursor = input.slice(0, cursorPos);
+    const textAfterCursor = input.slice(cursorPos);
+
+    // Replace the @query with @Type:Name
+    const atMatch = textBeforeCursor.match(/@([^\s@]*)$/);
+    if (atMatch) {
+      const beforeAt = textBeforeCursor.slice(0, -atMatch[0].length);
+      const ref = `@${entity.type}:${entity.name}`;
+      setInput(beforeAt + ref + ' ' + textAfterCursor);
+    }
+    setShowAtMenu(false);
+    inputRef.current?.focus();
+  };
 
   const handleSend = useCallback(() => {
     if (!input.trim() || status !== 'online') return;
@@ -162,6 +268,31 @@ export function Computation({
   }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // @ menu navigation
+    if (showAtMenu && filteredEntities.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedAtIndex(i => Math.min(i + 1, filteredEntities.length - 1));
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedAtIndex(i => Math.max(i - 1, 0));
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        insertAtReference(filteredEntities[selectedAtIndex]);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowAtMenu(false);
+        return;
+      }
+    }
+
+    // Normal send
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -273,10 +404,7 @@ export function Computation({
                 <Atom className="w-6 h-6 text-am-accent" />
               </div>
               <div className="space-y-2">
-                <h2 className="text-lg font-medium text-am-text-primary">Start a new research session</h2>
-                <p className="text-sm text-am-text-muted">
-                  Describe your research goal below. I can help with protein ensemble analysis, molecular docking, literature search, and more.
-                </p>
+                <h2 className="text-xl font-medium text-am-text-primary">What will you discover?</h2>
               </div>
             </div>
           </div>
@@ -313,17 +441,30 @@ export function Computation({
               const isLastAssistant =
                 msg.role === 'assistant' && index === messages.length - 1;
 
-              // ── Q5c FIX: Only hide empty CURRENT assistant message while tools run ──
+              // Per-message tool calls (not global anymore)
+              const msgToolCalls = msg.tool_calls || [];
+              const hasToolCalls = msgToolCalls.length > 0;
+
+              // ── Only hide empty CURRENT assistant message while tools run ──
               // The backend emits TEXT_MESSAGE_START (empty content) before text arrives.
               // Hide ONLY the current (last) empty message, NOT old messages from previous responses
-              if (msg.role === 'assistant' && !msg.content && toolCalls.length > 0 && isLastAssistant && isRunning) {
-                return null;
+              if (msg.role === 'assistant' && !msg.content && hasToolCalls && isLastAssistant && isRunning) {
+                // Still render tool calls even if text is empty
+                return (
+                  <div key={msg.id} className="w-full">
+                    <TraceStream
+                      toolCalls={msgToolCalls}
+                      isRunning={isRunning && isLastAssistant}
+                      currentTool={isLastAssistant ? currentTool : null}
+                    />
+                  </div>
+                );
               }
 
               // ── normal message ───────────────────────────────────────
 
               const showCursor =
-                isLastAssistant && isRunning && (msg.content || toolCalls.length === 0);
+                isLastAssistant && isRunning && (msg.content || !hasToolCalls);
 
               // While streaming the last assistant message, split at the
               // last newline: completed lines get full markdown treatment,
@@ -347,35 +488,55 @@ export function Computation({
               }
 
               return (
-                <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[80%] ${
-                    msg.role === 'user'
-                      ? 'bg-am-accent text-white rounded-2xl rounded-tr-sm px-4 py-2.5'
-                      : 'text-am-text-primary'
-                  }`}>
-                    {msg.role === 'assistant'
-                      ? assistantBody
-                      : <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
-                    }
-                    {showCursor && (
-                      <span className="inline-block w-2 h-4 bg-am-accent ml-0.5 animate-pulse" />
-                    )}
+                <div key={msg.id} className="w-full space-y-4">
+                  {/* Message bubble */}
+                  <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[80%] ${
+                      msg.role === 'user'
+                        ? 'bg-am-accent text-white rounded-2xl rounded-tr-sm px-4 py-2.5'
+                        : 'text-am-text-primary'
+                    }`}>
+                      {msg.role === 'assistant'
+                        ? assistantBody
+                        : (
+                          <div className="space-y-2">
+                            {/* Show annotated screenshot if present */}
+                            {msg.screenshot_base64 && (
+                              <div className="rounded-lg overflow-hidden border border-white/20">
+                                <img
+                                  src={msg.screenshot_base64}
+                                  alt="Annotated structure"
+                                  className="max-w-[300px] max-h-[200px] object-contain"
+                                />
+                                <div className="px-2 py-1 bg-black/20 text-[10px] text-white/70 flex items-center gap-1">
+                                  <Pencil className="w-3 h-3" />
+                                  Annotated view sent to Gemini
+                                </div>
+                              </div>
+                            )}
+                            <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                          </div>
+                        )
+                      }
+                      {showCursor && (
+                        <span className="inline-block w-2 h-4 bg-am-accent ml-0.5 animate-pulse" />
+                      )}
+                    </div>
                   </div>
+                  {/* Per-message tool calls — rendered INLINE with each assistant message */}
+                  {msg.role === 'assistant' && hasToolCalls && (
+                    <TraceStream
+                      toolCalls={msgToolCalls}
+                      isRunning={isRunning && isLastAssistant}
+                      currentTool={isLastAssistant ? currentTool : null}
+                    />
+                  )}
                 </div>
               );
             })}
 
-            {/* ── Tool-execution trace (collapsible, auto-collapses on finish) ── */}
-            {toolCalls.length > 0 && (
-              <TraceStream
-                toolCalls={toolCalls}
-                isRunning={isRunning}
-                currentTool={currentTool}
-              />
-            )}
-
-            {/* ── Typing indicator ─── shown only before ANY output exists ── */}
-            {isRunning && messages.every(m => m.role === 'user') && toolCalls.length === 0 && (
+            {/* ── Typing indicator ─── shown only before any assistant message exists ── */}
+            {isRunning && !messages.some(m => m.role === 'assistant') && (
               <div className="flex justify-start">
                 <div className="bg-am-secondary border border-am-border rounded-2xl rounded-tl-sm px-4 py-3">
                   <div className="flex items-center gap-2">
@@ -394,16 +555,30 @@ export function Computation({
           </div>
         )}
 
+        {/* Debug: @ autocomplete state - remove after verified working */}
+        <div className="px-4 py-1 text-[10px] text-am-text-muted font-mono bg-am-tertiary/50 flex gap-4 border-b border-am-border/30">
+          <span className={kgEntities.length > 0 ? 'text-emerald-400' : 'text-red-400'}>
+            KG: {kgEntities.length} entities
+          </span>
+          <span className={showAtMenu ? 'text-emerald-400' : 'text-am-text-muted'}>
+            Menu: {showAtMenu ? 'OPEN' : 'closed'}
+          </span>
+          <span>Query: "{atQuery}"</span>
+          <span>Filtered: {filteredEntities.length}</span>
+        </div>
+
         {/* Input Area */}
         <div className="flex-shrink-0 px-4 sm:px-6 pb-4 sm:pb-6">
-          <div className="bg-am-secondary border-2 border-am-border rounded-xl overflow-hidden focus-within:border-am-accent focus-within:ring-2 focus-within:ring-am-accent/20 transition-all">
-            {/* Input */}
+          {/* NOTE: overflow-visible required so @ menu shows above input */}
+          <div className="bg-am-secondary border-2 border-am-border rounded-xl overflow-visible focus-within:border-am-accent focus-within:ring-2 focus-within:ring-am-accent/20 transition-all">
+            {/* Input with @ autocomplete */}
             <div className="relative">
               <textarea
                 ref={inputRef}
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
+                onBlur={() => setTimeout(() => setShowAtMenu(false), 150)}
                 placeholder="Ask anything, @ for context"
                 className="w-full px-4 py-3 bg-transparent text-am-text-primary placeholder-am-text-muted text-sm resize-none focus:outline-none focus:ring-0"
                 rows={1}
@@ -411,6 +586,47 @@ export function Computation({
                 aria-label="Research input message"
                 disabled={status !== 'online'}
               />
+
+              {/* @ Autocomplete Menu */}
+              {showAtMenu && filteredEntities.length > 0 && (
+                <div
+                  className="absolute bottom-full left-4 mb-2 bg-am-secondary border border-am-border rounded-lg shadow-xl z-50 py-1 min-w-[280px] max-h-[300px] overflow-y-auto"
+                  style={{ maxWidth: 'calc(100% - 32px)' }}
+                >
+                  <div className="px-3 py-1.5 text-[10px] text-am-text-muted uppercase tracking-wider border-b border-am-border/50">
+                    Knowledge Graph ({kgEntities.length} entities)
+                  </div>
+                  {filteredEntities.map((entity, i) => (
+                    <button
+                      key={entity.id}
+                      onMouseDown={(e) => { e.preventDefault(); insertAtReference(entity); }}
+                      className={`w-full px-3 py-2 text-left flex items-center gap-3 transition-colors ${
+                        i === selectedAtIndex ? 'bg-am-accent/20 text-am-accent' : 'text-am-text-secondary hover:bg-am-tertiary'
+                      }`}
+                    >
+                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                        entity.type === 'Protein' ? 'bg-blue-400' :
+                        entity.type === 'Ligand' ? 'bg-emerald-400' :
+                        entity.type === 'Residue' ? 'bg-amber-400' : 'bg-gray-400'
+                      }`} />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">{entity.name}</div>
+                        <div className="text-[10px] text-am-text-muted">{entity.type}</div>
+                      </div>
+                      {entity.properties?.best_energy && (
+                        <span className="text-[10px] text-emerald-400 font-mono">
+                          {entity.properties.best_energy.toFixed(1)} kcal
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                  {filteredEntities.length === 0 && atQuery && (
+                    <div className="px-3 py-2 text-xs text-am-text-muted">
+                      No matches for "{atQuery}"
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Toolbar */}

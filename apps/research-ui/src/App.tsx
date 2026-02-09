@@ -139,8 +139,15 @@ function ResearchEngine() {
   const { events, currentEvent, clearEvents } = useAGUIEvents();
   const { isRunning, state, artifacts, toolCalls, textContent, runAgent, abort } = useAGUIAgent();
 
-  // UI State
-  const [messages, setMessages] = useState<Array<{ id: string; role: string; content: string }>>([]);
+  // UI State — messages now include tool_calls per-message (not global)
+  // Also supports screenshot_base64 for annotated messages
+  const [messages, setMessages] = useState<Array<{
+    id: string;
+    role: string;
+    content: string;
+    screenshot_base64?: string;  // For annotated messages
+    tool_calls?: Array<{ id: string; name: string; args: Record<string, any>; startTime?: number; endTime?: number; duration?: number }>;
+  }>>([]);
   const [pdbData, setPdbData] = useState<string | null>(null);
   const [currentTool, setCurrentTool] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -156,17 +163,40 @@ function ResearchEngine() {
     value: visibleArtifacts
   });
 
-  // Accumulated tool calls across all runs in this conversation.
-  // Cleared only on "New Chat" so the Simulation Campaign box persists.
-  const [allToolCalls, setAllToolCalls] = useState<Array<{ id: string; name: string; args: Record<string, any> }>>([]);
+  // Track current assistant message ID for associating tool calls
+  const [currentAssistantMsgId, setCurrentAssistantMsgId] = useState<string | null>(null);
+
+  // Associate incoming tool calls with the current assistant message
   useEffect(() => {
-    if (toolCalls.length === 0) return;
-    setAllToolCalls(prev => {
-      const seen = new Set(prev.map(tc => tc.id));
-      const fresh = toolCalls.filter(tc => !seen.has(tc.id));
-      return fresh.length ? [...prev, ...fresh] : prev;
+    if (toolCalls.length === 0 || !currentAssistantMsgId) return;
+
+    // ===== VERIFICATION LOGGING: Tool merge useEffect =====
+    console.log('[App.tsx] [VERIFY] Tool merge useEffect: toolCalls.length=', toolCalls.length, ', currentAssistantMsgId=', currentAssistantMsgId);
+    console.log('[App.tsx] [VERIFY] Tool merge useEffect: toolCall IDs=', toolCalls.map(tc => tc.id).join(', '));
+
+    setMessages(prev => {
+      const targetMsg = prev.find(m => m.id === currentAssistantMsgId);
+      console.log('[App.tsx] [VERIFY] Tool merge: Target message found=', !!targetMsg, ', existing tool_calls=', (targetMsg?.tool_calls || []).length);
+
+      return prev.map(msg => {
+        if (msg.id === currentAssistantMsgId) {
+          // Merge new tool calls, avoiding duplicates
+          const existingIds = new Set((msg.tool_calls || []).map(tc => tc.id));
+          const newCalls = toolCalls.filter(tc => !existingIds.has(tc.id));
+          if (newCalls.length === 0) {
+            console.log('[App.tsx] [VERIFY] Tool merge: No new calls to add (all already exist)');
+            return msg;
+          }
+          console.log('[App.tsx] [VERIFY] Tool merge: Adding', newCalls.length, 'new tools to message', msg.id);
+          return {
+            ...msg,
+            tool_calls: [...(msg.tool_calls || []), ...newCalls]
+          };
+        }
+        return msg;
+      });
     });
-  }, [toolCalls]);
+  }, [toolCalls, currentAssistantMsgId]);
 
   // Real data from backend
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -183,6 +213,10 @@ function ResearchEngine() {
   // Resizable right panel
   const [panelWidth, setPanelWidth] = useState(400);
   const isDragging = useRef(false);
+
+  // Track when a new run starts to prevent race condition where tools from run N+1
+  // get merged into run N's assistant message (due to async state updates)
+  const newRunStartedRef = useRef(false);
 
   const handleDragStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -335,23 +369,99 @@ function ResearchEngine() {
       case EventType.RUN_STARTED:
         clearEvents();
         setShowExperiment(true);
+        // Mark that a new run has started (ref is synchronous, unlike state)
+        // This prevents tools from the new run being merged to old messages
+        newRunStartedRef.current = true;
+        // ===== VERIFICATION LOGGING: RUN_STARTED =====
+        console.log('[App.tsx] [VERIFY] RUN_STARTED: newRunStartedRef.current = TRUE, currentAssistantMsgId will be set to NULL');
+        console.log('[App.tsx] [VERIFY] RUN_STARTED: This prevents tools from new run being merged to old messages');
+        // Don't create message yet - wait for TOOL_CALL_START or TEXT_MESSAGE_START
+        setCurrentAssistantMsgId(null);
         break;
       case EventType.TEXT_MESSAGE_START:
-        setMessages(prev => [...prev, {
-          id: currentEvent.messageId,
-          role: 'assistant',
-          content: '',
-        }]);
+        // New message started, clear the new-run flag
+        console.log('[App.tsx] [VERIFY] TEXT_MESSAGE_START: Clearing newRunStartedRef (was', newRunStartedRef.current, '), messageId=', currentEvent.messageId);
+        newRunStartedRef.current = false;
+        // If we already have an assistant message for this run (created on RUN_STARTED),
+        // update its ID to match the backend's message ID. Otherwise create a new one.
+        setMessages(prev => {
+          // Find the last empty assistant message (our placeholder from RUN_STARTED)
+          let lastAssistantIdx = -1;
+          for (let i = prev.length - 1; i >= 0; i--) {
+            if (prev[i].role === 'assistant' && !prev[i].content) {
+              lastAssistantIdx = i;
+              break;
+            }
+          }
+          if (lastAssistantIdx >= 0) {
+            // Update the placeholder message with the real ID
+            return prev.map((m, i) =>
+              i === lastAssistantIdx
+                ? { ...m, id: currentEvent.messageId }
+                : m
+            );
+          }
+          // No placeholder exists, create new message
+          return [...prev, {
+            id: currentEvent.messageId,
+            role: 'assistant',
+            content: '',
+            tool_calls: [],
+          }];
+        });
+        setCurrentAssistantMsgId(currentEvent.messageId);
         break;
       case EventType.TEXT_MESSAGE_CONTENT:
-        setMessages(prev => prev.map(m =>
-          m.id === currentEvent.messageId
-            ? { ...m, content: m.content + (currentEvent.delta || '') }
-            : m
-        ));
+        setMessages(prev => {
+          // First, try to find the message with exact ID match
+          const idxById = prev.findIndex(m => m.id === currentEvent.messageId);
+          if (idxById >= 0) {
+            return prev.map((m, i) =>
+              i === idxById
+                ? { ...m, content: (m.content || '') + (currentEvent.delta || '') }
+                : m
+            );
+          }
+          // Fallback: update the last assistant message (defensive for race conditions)
+          for (let i = prev.length - 1; i >= 0; i--) {
+            if (prev[i].role === 'assistant') {
+              return prev.map((m, j) =>
+                j === i
+                  ? { ...m, content: (m.content || '') + (currentEvent.delta || '') }
+                  : m
+              );
+            }
+          }
+          // No assistant message found - shouldn't happen, but log for debugging
+          console.warn('[TEXT_MESSAGE_CONTENT] No matching message found for ID:', currentEvent.messageId);
+          return prev;
+        });
         break;
       case EventType.TOOL_CALL_START:
         setCurrentTool(currentEvent.toolCallName || 'Processing');
+        // If a new run started OR no assistant message exists, create a new message
+        // The ref check handles the race condition where currentAssistantMsgId
+        // hasn't been reset to null yet (due to async state batching)
+
+        // ===== VERIFICATION LOGGING: TOOL_CALL_START =====
+        console.log('[App.tsx] [VERIFY] TOOL_CALL_START: toolCallName=', currentEvent.toolCallName);
+        console.log('[App.tsx] [VERIFY] TOOL_CALL_START: newRunStartedRef.current=', newRunStartedRef.current, ', currentAssistantMsgId=', currentAssistantMsgId);
+
+        if (newRunStartedRef.current || !currentAssistantMsgId) {
+          console.log('[App.tsx] [VERIFY] TOOL_CALL_START: ✓ Creating NEW assistant message (ref=', newRunStartedRef.current, ', msgId=', currentAssistantMsgId, ')');
+          newRunStartedRef.current = false; // Reset after creating message for this run
+          const toolMsgId = `assistant-${Date.now()}`;
+          console.log('[App.tsx] [VERIFY] TOOL_CALL_START: New message ID =', toolMsgId);
+          setCurrentAssistantMsgId(toolMsgId);
+          setMessages(prev => [...prev, {
+            id: toolMsgId,
+            role: 'assistant',
+            content: '',
+            tool_calls: [],
+          }]);
+        } else {
+          console.log('[App.tsx] [VERIFY] TOOL_CALL_START: Using existing message ID =', currentAssistantMsgId);
+        }
         break;
       case EventType.TOOL_CALL_END:
         setCurrentTool(null);
@@ -371,16 +481,23 @@ function ResearchEngine() {
         }
         break;
       case EventType.RUN_FINISHED:
+        console.log('[App.tsx] [VERIFY] RUN_FINISHED: Clearing currentAssistantMsgId (was', currentAssistantMsgId, ')');
         setCurrentTool(null);
+        setCurrentAssistantMsgId(null);  // Run complete, clear tracking
         break;
     }
   }, [currentEvent, clearEvents]);
 
   // Send message with mode routing and optional annotation
+  // FIX 2: Pass conversation history to backend (following agent-chat-ui pattern)
   const handleSend = useCallback(async (message: string, mode?: ResearchMode) => {
     if (!message.trim() || status !== 'online') return;
 
     const userMsg = { id: `u-${Date.now()}`, role: 'user', content: message };
+
+    // Capture current messages BEFORE adding new one (for history context)
+    const currentHistory = [...messages];
+
     setMessages(prev => [...prev, userMsg]);
 
     // Create conversation on backend if new
@@ -406,11 +523,13 @@ function ResearchEngine() {
     }
 
     try {
-      await runAgent(message, mode);
+      // Pass conversation history for context continuity
+      // Agent can now understand "the above result", "its spatial interaction", etc.
+      await runAgent(message, mode, undefined, currentHistory);
     } catch (e) {
       console.error(e);
     }
-  }, [status, runAgent, activeConversationId, activeWorkspaceId]);
+  }, [status, runAgent, activeConversationId, activeWorkspaceId, messages]);
 
   // Annotation handlers
   const handleStartAnnotation = useCallback(() => {
@@ -418,15 +537,22 @@ function ResearchEngine() {
   }, []);
 
   // Unified: annotation drawing + question → multimodal send to Gemini
+  // Always use planning mode for annotations (Gemini 3 visual analysis)
+  // Now includes screenshot in the message so user can see what was captured
+  // FIX 2: Also pass conversation history for context continuity
   const handleAnnotationSend = useCallback((annotation: any, question: string) => {
+    // Capture current messages BEFORE adding new one (for history context)
+    const currentHistory = [...messages];
+
     setMessages(prev => [...prev, {
       id: `u-${Date.now()}`,
       role: 'user',
-      content: question
+      content: question,
+      screenshot_base64: annotation?.screenshot_base64 || undefined,  // Show the captured screenshot
     }]);
-    runAgent(question, undefined, annotation);
+    runAgent(question, 'planning', annotation, currentHistory);  // Pass history for context
     setIsAnnotating(false);
-  }, [runAgent]);
+  }, [runAgent, messages]);
 
   const handleCancelAnnotation = useCallback(() => {
     setIsAnnotating(false);
@@ -437,13 +563,13 @@ function ResearchEngine() {
     setDismissedArtifacts(prev => new Set(prev).add(artifactId));
   }, []);
 
-  // New chat
+  // New chat - clear all state for fresh session
   const handleNewChat = () => {
     setMessages([]);
-    setAllToolCalls([]);
-    setDismissedArtifacts(new Set()); // Clear dismissed artifacts on new chat
-    setActiveConversationId(undefined); // This will trigger artifact reload (clear)
-    aguiService.artifacts = []; // Immediately clear artifacts from service
+    setCurrentAssistantMsgId(null);
+    setDismissedArtifacts(new Set());
+    setActiveConversationId(undefined);
+    aguiService.clearArtifacts(); // Properly clear artifacts and notify React
     setShowExperiment(false);
     setPdbData(null);
   };
@@ -506,7 +632,6 @@ function ResearchEngine() {
             <Computation
               messages={messages}
               artifacts={visibleArtifacts}
-              toolCalls={allToolCalls}
               isRunning={isRunning}
               currentTool={currentTool}
               textContent={textContent}
@@ -521,8 +646,8 @@ function ResearchEngine() {
               onStartAnnotation={handleStartAnnotation}
             />
 
-            {/* Drag handle + Artifact Panel (Right Side) */}
-            {artifacts.length > 0 && (
+            {/* Drag handle + Artifact Panel (Right Side) - only show when there are visible artifacts */}
+            {visibleArtifacts.length > 0 && (
               <>
                 {/* Resize grip — desktop only */}
                 <div

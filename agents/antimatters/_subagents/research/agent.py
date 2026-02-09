@@ -204,6 +204,7 @@ async def update_task_status(
             print(f"Warning: Failed to update ADK task list: {e}")
 
     return {
+        "artifact_id": artifact_id,  # Required for server to read updated artifact and emit event
         "success": True,
         "task_id": task_id,
         "status": status,
@@ -497,6 +498,7 @@ async def validate_protocol(
             print(f"Warning: Failed to update ADK protocol: {e}")
 
     return {
+        "artifact_id": artifact_id,  # Required for server to read updated artifact and emit event
         "success": bool(artifact),
         "validation_status": status,
         "ready_for_engineering": confidence_score >= threshold,

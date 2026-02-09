@@ -11,11 +11,28 @@ import os
 import sys
 import uuid
 import base64
+import logging
 from pathlib import Path
 from typing import Optional, AsyncGenerator, Any, Dict, List, Union
 from contextlib import asynccontextmanager
 from datetime import datetime
-from enum import Enum   
+from enum import Enum
+
+# Configure logging to show verification logs
+# Use force=True to override any existing logging config (Python 3.8+)
+# Set root logger to INFO so ALL child loggers (including agents) will output
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),  # Console output
+    ],
+    force=True  # Override any existing config from imports
+)
+# Also explicitly set root logger level (belt and suspenders)
+logging.getLogger().setLevel(logging.INFO)
+# Ensure no loggers are silenced
+logging.getLogger().handlers[0].setLevel(logging.INFO)
 
 # Add core to path
 CORE_ROOT = Path(__file__).parent.parent
@@ -337,6 +354,21 @@ class ADKAgentRunner:
         self.artifact_manager = ArtifactManager()
         # Default workspace for new conversations
         self.default_workspace_id = "ws_core"
+        # SINGLETON session service - persists across requests for conversation continuity
+        # This fixes the issue where session state was lost between requests
+        self._global_session_service = None
+
+    def _get_session_service(self):
+        """Get or create singleton session service.
+
+        This ensures conversation state persists across API requests,
+        following the pattern from agent-chat-ui-main and open-canvas-main.
+        """
+        if self._global_session_service is None:
+            from google.adk.sessions import InMemorySessionService
+            self._global_session_service = InMemorySessionService()
+            print("📦 [Session] Created singleton InMemorySessionService", flush=True)
+        return self._global_session_service
 
     async def initialize(self):
         """Lazy initialization of ADK components."""
@@ -388,6 +420,7 @@ class ADKAgentRunner:
             print(f"🔬 [Mode] Serendipitize mode - using docking_workflow", flush=True)
 
         # Helper to create runner with current model configuration
+        # Uses SINGLETON session service for conversation continuity (FIX 1)
         def create_runner_with_models(use_fallback: bool = False, agent=None):
             agent = agent or selected_agent
             if use_fallback:
@@ -397,7 +430,10 @@ class ADKAgentRunner:
                 except Exception as fe:
                     print(f"⚠️ [ModelFallback] Failed to create fallback agent: {fe}, using default", flush=True)
 
-            session_service = InMemorySessionService()
+            # Use singleton session service instead of creating fresh one each request
+            # This preserves state (experiment_artifact_id, docking_completed, etc.)
+            # across mode switches (serendipitize → planning)
+            session_service = self._get_session_service()
             runner = Runner(
                 agent=agent,
                 app_name="agui_core",
@@ -451,6 +487,45 @@ class ADKAgentRunner:
             if not user_message:
                 raise ValueError("No user message found in input")
 
+            # FIX 3 (Improved): Build conversation context for the agent
+            # Two sources: (A) frontend sends history via FIX 2, or (B) load from DB as fallback
+            if len(input_data.messages) > 1:
+                # Case A: Frontend sent full conversation history (FIX 2 working)
+                # Build context from the messages (excluding the last user message which is current)
+                prior_msgs = [m for m in input_data.messages[:-1]]  # All but last
+                if prior_msgs:
+                    history_parts = ["[CONVERSATION HISTORY - use this for context:]"]
+                    for msg in prior_msgs[-10:]:  # Last 10 prior messages
+                        role = msg.role.upper() if hasattr(msg, 'role') else 'UNKNOWN'
+                        content = msg.content if isinstance(msg.content, str) else str(msg.content)
+                        content = content[:500]  # Truncate long messages
+                        history_parts.append(f"{role}: {content}")
+                    history_parts.append("[END HISTORY]\n")
+                    user_message = "\n".join(history_parts) + "\n" + user_message
+                    print(f"📜 [History] Built context from {len(prior_msgs[-10:])} frontend messages", flush=True)
+            elif conversation:
+                # Case B: Frontend sent only current message (backwards compatibility)
+                # Load prior messages from DB
+                try:
+                    conv_with_messages = conversation_service.get(
+                        conversation["id"],
+                        include_messages=True
+                    )
+                    prior_messages = conv_with_messages.get("messages", []) if conv_with_messages else []
+
+                    if prior_messages:
+                        history_parts = ["[CONVERSATION HISTORY - use this for context:]"]
+                        # Get last 10 messages for context (truncate long content)
+                        for msg in prior_messages[-10:]:
+                            role = msg.get('role', 'unknown').upper()
+                            content = msg.get('content', '')[:500]  # Truncate long messages
+                            history_parts.append(f"{role}: {content}")
+                        history_parts.append("[END HISTORY]\n")
+                        user_message = "\n".join(history_parts) + "\n" + user_message
+                        print(f"📜 [History] Loaded {len(prior_messages[-10:])} messages from DB", flush=True)
+                except Exception as hist_err:
+                    print(f"⚠️ [History] Failed to load prior messages: {hist_err}", flush=True)
+
             # Persist user message to conversation
             conversation_service.add_message(
                 conversation_id=conversation["id"],
@@ -476,6 +551,63 @@ class ADKAgentRunner:
                         f"description: {input_data.annotation.description}]"
                     )
                 user_message += annotation_context
+
+            # Expand @Type:Name references to KG context (e.g., "@Ligand:Fasudil")
+            import re
+            at_refs = re.findall(r'@[\w-]+(?::[\w-]+)?', user_message)
+            if at_refs:
+                try:
+                    from core.agents.antimatters._subagents.evolution.agent import get_neo4j_driver
+                    driver, database = get_neo4j_driver()
+                    kg_context_parts = ["[KG CONTEXT for referenced entities:]"]
+
+                    for ref in at_refs:
+                        parts = ref[1:].split(":", 1)
+                        entity_name = parts[1] if len(parts) > 1 else parts[0]
+
+                        with driver.session(database=database) as session:
+                            # Query entity + INTERACTS_WITH relationships for spatial context
+                            result = session.run("""
+                                MATCH (n:Entity)
+                                WHERE toLower(n.name) = toLower($name)
+                                OPTIONAL MATCH (n)-[r:RELATIONSHIP {type: 'INTERACTS_WITH'}]->(residue:Entity)
+                                WITH n, collect({
+                                    residue_name: residue.name,
+                                    residue_id: residue.id,
+                                    interaction_props: r.properties
+                                }) AS interactions
+                                RETURN n.id AS id, n.name AS name, n.type AS type,
+                                       n.properties AS properties, interactions
+                                LIMIT 1
+                            """, {"name": entity_name})
+                            record = result.single()
+
+                            if record:
+                                props = json.loads(record["properties"]) if record["properties"] else {}
+                                kg_context_parts.append(f"• {ref}: id={record['id']}, type={record['type']}")
+                                if props.get("smiles"):
+                                    kg_context_parts.append(f"  SMILES: {props['smiles']}")
+                                if props.get("best_energy"):
+                                    kg_context_parts.append(f"  Energy: {props['best_energy']} kcal/mol")
+                                # Include spatial relationships from INTERACTS_WITH
+                                interactions = record.get("interactions", [])
+                                if interactions and interactions[0].get("residue_name"):
+                                    int_summary = []
+                                    for intr in interactions:
+                                        if intr.get("residue_name"):
+                                            int_props = json.loads(intr["interaction_props"]) if intr.get("interaction_props") else {}
+                                            int_type = int_props.get("interaction_type", "unknown")
+                                            int_summary.append(f"{intr['residue_name']}({int_type})")
+                                    if int_summary:
+                                        kg_context_parts.append(f"  INTERACTS_WITH: {', '.join(int_summary)}")
+
+                    driver.close()
+
+                    if len(kg_context_parts) > 1:
+                        user_message = "\n".join(kg_context_parts) + "\n\n" + user_message
+                        print(f"[@context] Expanded {len(at_refs)} references", flush=True)
+                except Exception as kg_err:
+                    print(f"[@context] KG expansion failed: {kg_err}", flush=True)
 
             # Build the message object — multimodal when annotation includes a screenshot
             # so Gemini can perform spatial reasoning on the annotated 3D view (AI Studio style).
@@ -884,8 +1016,9 @@ class ADKAgentRunner:
         result_dict = dict(result) if hasattr(result, 'items') else {}
         workspace_id = workspace_id or self.default_workspace_id
 
-        if "artifact_id" in result_dict:
-            artifact_id = result_dict["artifact_id"]
+        # Check for artifact_id (from wrapper tools) or id (from direct artifact returns)
+        if "artifact_id" in result_dict or "id" in result_dict:
+            artifact_id = result_dict.get("artifact_id") or result_dict.get("id")
             artifact = None
 
             # 1. .adk/artifacts/ first — this is where agents write in-flight
@@ -1179,6 +1312,96 @@ async def get_evolution_graph(protein_name: str = "Alpha-Synuclein"):
             "success": False,
             "error": str(e)
         }
+
+
+@app.post("/evolution/expand")
+async def expand_references(request: Request):
+    """Expand @Type:Name references to full KG context.
+
+    Input: {"references": ["@Ligand:Fasudil", "@Residue:Y125"]}
+    Output: {"context": {...entity data...}, "markdown": "...formatted context..."}
+    """
+    try:
+        from core.agents.antimatters._subagents.evolution.agent import get_neo4j_driver
+
+        data = await request.json()
+        refs = data.get("references", [])
+
+        context = {}
+        markdown_parts = []
+
+        driver, database = get_neo4j_driver()
+
+        for ref in refs:
+            # Parse @Type:Name format
+            if not ref.startswith("@"):
+                continue
+            parts = ref[1:].split(":", 1)
+            entity_type = parts[0] if len(parts) > 1 else None
+            entity_name = parts[1] if len(parts) > 1 else parts[0]
+
+            # Query KG by name (case-insensitive) + INTERACTS_WITH relationships
+            with driver.session(database=database) as session:
+                result = session.run("""
+                    MATCH (n:Entity)
+                    WHERE toLower(n.name) = toLower($name)
+                    OPTIONAL MATCH (n)-[r:RELATIONSHIP {type: 'INTERACTS_WITH'}]->(residue:Entity)
+                    WITH n, collect({
+                        residue_name: residue.name,
+                        residue_id: residue.id,
+                        interaction_props: r.properties
+                    }) AS interactions
+                    RETURN n.id AS id, n.name AS name, n.type AS type,
+                           n.properties AS properties, interactions
+                    LIMIT 1
+                """, {"name": entity_name})
+
+                record = result.single()
+                if record:
+                    props = json.loads(record["properties"]) if record["properties"] else {}
+                    interactions = record.get("interactions", [])
+
+                    # Extract interaction types
+                    interaction_list = []
+                    for intr in interactions:
+                        if intr.get("residue_name"):
+                            int_props = json.loads(intr["interaction_props"]) if intr.get("interaction_props") else {}
+                            interaction_list.append({
+                                "residue": intr["residue_name"],
+                                "residue_id": intr["residue_id"],
+                                "type": int_props.get("interaction_type", "unknown")
+                            })
+
+                    context[ref] = {
+                        "id": record["id"],
+                        "type": record["type"],
+                        "name": record["name"],
+                        "properties": props,
+                        "interactions": interaction_list  # Spatial relationships
+                    }
+
+                    # Format for LLM context
+                    md = f"**{ref}** ({record['type']})\n"
+                    if props.get("smiles"):
+                        md += f"- SMILES: `{props['smiles']}`\n"
+                    if props.get("best_energy"):
+                        md += f"- Best energy: {props['best_energy']} kcal/mol\n"
+                    if interaction_list:
+                        int_summary = [f"{i['residue']}({i['type']})" for i in interaction_list]
+                        md += f"- INTERACTS_WITH: {', '.join(int_summary)}\n"
+                    markdown_parts.append(md)
+
+        driver.close()
+
+        return {
+            "success": True,
+            "context": context,
+            "markdown": "\n".join(markdown_parts) if markdown_parts else None,
+            "n_resolved": len(context)
+        }
+
+    except Exception as e:
+        return {"success": False, "error": str(e), "context": {}}
 
 
 @app.post("/model-status/reset")
