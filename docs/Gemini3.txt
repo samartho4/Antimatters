@@ -1,0 +1,128 @@
+# Gemini 3 Integration in Antimatters
+
+## Overview
+
+Antimatters is built entirely on **Gemini 3**, Google's latest foundation model family, leveraging its advanced capabilities for scientific acceleration across life sciences, materials research, and biomedical applications.
+
+### Agentic Vision with Code Execution
+The Evolution agent uses **Gemini 3 Flash's `code_execution` tool** to implement a Think-Act-Observe loop for dynamic visualization. When analyzing experimental results, the model generates Python code (matplotlib, py3Dmol), executes it server-side, and returns publication-ready figures—without pre-built templates. The model reasons about what visualization best represents the scientific insight, then writes and runs the code to create it.
+
+### Multimodal Input Processing
+Scientists **annotate molecular structures directly in the browser**. These annotated screenshots are attached to queries via `Part.from_bytes()`, enabling Gemini 3 to perform spatial reasoning about molecular geometry, binding interactions, and structural features from visual context alone—no additional tool calls required.
+
+### Knowledge-Constrained Generation
+**Gemini 3 Pro** analyzes patterns in the Neo4j knowledge graph, identifying structural features that correlate with experimental outcomes. It generates novel hypotheses and molecular structures satisfying these learned constraints, with explicit rationale for each modification. Domain-specific validators ensure scientific validity.
+
+### Streaming Tool Orchestration
+Gemini 3 coordinates multiple **MCP servers** (databases, simulation tools, literature APIs) in real-time, maintaining context across complex multi-step scientific workflows while streaming progress via AG-UI SSE.
+
+---
+
+## Technical Implementation
+
+### 1. Code Execution with Images (Agentic Vision)
+
+**Model**: `gemini-3-flash-preview`
+
+```python
+from google import genai
+from google.genai import types
+
+# Enable code execution - Gemini 3 Flash feature
+config = types.GenerateContentConfig(
+    tools=[types.Tool(code_execution=types.ToolCodeExecution())]
+)
+
+response = client.models.generate_content(
+    model="gemini-3-flash-preview",
+    contents=code_prompt,
+    config=config
+)
+
+# Parse response for generated artifacts
+for part in response.candidates[0].content.parts:
+    if hasattr(part, 'inline_data') and part.inline_data:
+        figure_base64 = part.inline_data.data  # Generated PNG
+    elif hasattr(part, 'executable_code') and part.executable_code:
+        code_used = part.executable_code.code  # Python code Gemini wrote
+    elif hasattr(part, 'code_execution_result') and part.code_execution_result:
+        execution_result = part.code_execution_result.output  # stdout
+```
+
+**Capability**: Gemini 3 Flash writes Python code, executes it in a sandboxed environment, and returns the generated image—all in a single API call.
+
+### 2. Multimodal Input (Images + Text)
+
+**Model**: `gemini-3-flash-preview`
+
+```python
+from google.genai import types as genai_types
+
+# Create multimodal message with annotated screenshot
+new_message = genai_types.Content(
+    role="user",
+    parts=[
+        genai_types.Part(text=user_message),
+        genai_types.Part.from_bytes(data=img_bytes, mime_type="image/png"),
+    ],
+)
+```
+
+**Use Case**: User draws annotation on 3D viewer → screenshot captured → sent to Gemini 3 → model reasons about spatial relationships without needing structure files.
+
+### 3. Knowledge-Guided Generation
+
+**Model**: `gemini-3-pro-preview`
+
+```python
+response = client.models.generate_content(
+    model="gemini-3-pro-preview",
+    contents=prompt  # Includes patterns from knowledge graph
+)
+```
+
+**Output Example**:
+```json
+{
+  "hypothesis": "Modified structure with enhanced binding affinity",
+  "rationale": "Added functional group based on successful patterns in knowledge graph",
+  "valid": true,
+  "confidence": 0.87
+}
+```
+
+### 4. Model Configuration
+
+```python
+class GeminiModel(Enum):
+    """Gemini 3 model family."""
+    FLASH_3 = "gemini-3-flash-preview"  # Fast, code_execution capable
+    PRO_3 = "gemini-3-pro-preview"      # Pro-grade reasoning
+
+@dataclass
+class ModelConfig:
+    coordinator: str = GeminiModel.FLASH_3.value   # Fast routing
+    research:    str = GeminiModel.FLASH_3.value   # Multimodal literature
+    engineering: str = GeminiModel.FLASH_3.value   # Tool coordination
+    evolution:   str = GeminiModel.PRO_3.value     # Complex reasoning
+```
+
+---
+
+## Gemini 3 Features Used
+
+| Feature | Model | API | Application |
+|---------|-------|-----|-------------|
+| **Agentic Vision** | Flash | `code_execution` | Publication figures, 3D renders |
+| **Multimodal Input** | Flash | `Part.from_bytes()` | Annotated structure analysis |
+| **Complex Reasoning** | Pro | Text generation | Pattern analysis, hypothesis generation |
+| **Tool Orchestration** | Flash | ADK + MCP | Multi-server coordination |
+| **1M Context** | Pro | Native | Full experiment history |
+
+---
+
+## References
+
+- [Gemini 3 Developer Guide](https://ai.google.dev/gemini-api/docs/gemini-3)
+- [Agentic Vision in Gemini 3 Flash](https://blog.google/innovation-and-ai/technology/developers-tools/agentic-vision-gemini-3-flash/)
+- [Build with Gemini 3 Flash](https://blog.google/innovation-and-ai/technology/developers-tools/build-with-gemini-3-flash/)
